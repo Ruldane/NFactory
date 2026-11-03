@@ -1,4 +1,5 @@
-"""Job queue seam: the API enqueues runs and indexing, the worker consumes them.
+"""Job queue seam: the API enqueues runs, indexing and agent checks; the worker consumes
+them.
 
 Interface: JobQueue (protocol), ArqQueue (Redis, production), MemoryQueue (tests),
 QueueUnavailableError.
@@ -9,7 +10,7 @@ from typing import Protocol
 from arq import ArqRedis, create_pool
 from arq.connections import RedisSettings
 
-from nfactory_core.pipeline import INDEX_JOB, RUN_JOB, RUN_QUEUE
+from nfactory_core.pipeline import AGENT_CHECK_JOB, INDEX_JOB, RUN_JOB, RUN_QUEUE
 
 
 class QueueUnavailableError(RuntimeError):
@@ -20,6 +21,8 @@ class JobQueue(Protocol):
     async def enqueue(self, run_id: str) -> None: ...
 
     async def enqueue_indexing(self, workspace_id: str) -> None: ...
+
+    async def enqueue_agent_check(self, check_id: str) -> None: ...
 
     async def close(self) -> None: ...
 
@@ -38,6 +41,9 @@ class ArqQueue:
     async def enqueue_indexing(self, workspace_id: str) -> None:
         # One pending indexing job per workspace; it embeds every pending chunk.
         await self._send(INDEX_JOB, workspace_id, f"index:{workspace_id}")
+
+    async def enqueue_agent_check(self, check_id: str) -> None:
+        await self._send(AGENT_CHECK_JOB, check_id, check_id)
 
     async def _send(self, job: str, arg: str, job_id: str) -> None:
         try:
@@ -61,6 +67,7 @@ class MemoryQueue:
     def __init__(self) -> None:
         self.enqueued: list[str] = []
         self.indexing: list[str] = []
+        self.agent_checks: list[str] = []
         self.broken = False
 
     async def enqueue(self, run_id: str) -> None:
@@ -72,6 +79,11 @@ class MemoryQueue:
         if self.broken:
             raise QueueUnavailableError("broken on purpose")
         self.indexing.append(workspace_id)
+
+    async def enqueue_agent_check(self, check_id: str) -> None:
+        if self.broken:
+            raise QueueUnavailableError("broken on purpose")
+        self.agent_checks.append(check_id)
 
     async def close(self) -> None:
         return None

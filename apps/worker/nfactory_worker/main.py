@@ -1,7 +1,8 @@
 """ARQ worker entry point. Run with: arq nfactory_worker.main.WorkerSettings
 
-Jobs: `ping` (health), `run_factory` (one factory run) and `index_knowledge` (the
-missing knowledge vectors of a workspace). Startup prepares the
+Jobs: `ping` (health), `run_factory` (one factory run), `index_knowledge` (the
+missing knowledge vectors of a workspace) and `check_agent_task` (test a coding
+agent's change in the sandbox). Startup prepares the
 database session factory and the LangGraph checkpoint tables.
 """
 
@@ -20,6 +21,7 @@ from nfactory_core.config import Settings, get_settings
 from nfactory_core.events import run_channel
 from nfactory_core.pipeline import RUN_QUEUE
 from nfactory_worker.jobs import process_run
+from nfactory_worker.jobs.agent_checks import check_agent_task as run_agent_check
 from nfactory_worker.jobs.indexing import index_pending_workspaces, index_workspace
 from nfactory_worker.jobs.recovery import recover_orphaned_runs, run_lease
 from nfactory_worker.runner import LocalRunner, Runner, SandboxRunner
@@ -95,6 +97,10 @@ async def index_knowledge(ctx: dict[str, Any], workspace_id: str) -> int:
     return report.embedded
 
 
+async def check_agent_task(ctx: dict[str, Any], check_id: str) -> str:
+    return await run_agent_check(ctx["sessions"], ctx["settings"], ctx["runner"], check_id)
+
+
 async def index_pending(ctx: dict[str, Any]) -> list[str]:
     """Catch-up for an indexing job that could not be queued or was dropped."""
     return await index_pending_workspaces(ctx["sessions"], ctx["settings"])
@@ -106,7 +112,7 @@ async def recover_runs(ctx: dict[str, Any]) -> list[str]:
 
 def build_worker_settings(settings: Settings) -> dict[str, Any]:
     return {
-        "functions": [ping, run_factory, index_knowledge],
+        "functions": [ping, run_factory, index_knowledge, check_agent_task],
         "on_startup": startup,
         "on_shutdown": shutdown,
         # Also catches a worker that died while another one keeps running.

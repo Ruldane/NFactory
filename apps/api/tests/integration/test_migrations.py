@@ -35,3 +35,28 @@ def test_downgrade_removes_every_table(empty_database_url: str) -> None:
 def test_upgrade_is_idempotent(empty_database_url: str) -> None:
     upgrade_to_head(empty_database_url)
     upgrade_to_head(empty_database_url)  # must be a no-op, not an error
+
+
+def test_the_migrations_match_the_models(empty_database_url: str) -> None:
+    """A hand-written migration must build exactly the tables the models describe."""
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+    from sqlalchemy import create_engine
+
+    upgrade_to_head(empty_database_url)
+    engine = create_engine(empty_database_url)
+    try:
+        with engine.connect() as connection:
+            context = MigrationContext.configure(
+                connection,
+                opts={
+                    "include_name": lambda name, type_, parents: (
+                        type_ != "table" or name in Base.metadata.tables
+                    )
+                },
+            )
+            diff = compare_metadata(context, Base.metadata)
+    finally:
+        engine.dispose()
+
+    assert diff == []

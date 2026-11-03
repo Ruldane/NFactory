@@ -10,6 +10,7 @@ from app.database import Database
 from app.errors import install_error_handlers
 from app.queue import ArqQueue, JobQueue
 from app.routes import (
+    agent_tasks,
     artifacts,
     dashboard,
     health,
@@ -85,7 +86,7 @@ def create_app(
 
     api = APIRouter(prefix=API_PREFIX)
     routers = (health, dashboard, projects, recipes, runs, artifacts, settings_routes)
-    for module in (*routers, providers, routing, knowledge, local_runtimes):
+    for module in (*routers, providers, routing, knowledge, local_runtimes, agent_tasks):
         api.include_router(module.router)
     app.include_router(api)
     return app

@@ -6,7 +6,8 @@ edits). Every write by NFactory is staged at once, so the index records what NFa
 wrote: a file whose working copy differs from the index, or an untracked file in the
 way, was changed by someone else and is never overwritten (Conflict, nothing written).
 
-Interface: prepare, apply_files, manifest, diff, commit, rollback; Worktree; GitRefused,
+Interface: prepare, apply_files, adopt, manifest, diff, tracked_files, commit, rollback;
+check_repo_root; Worktree; GitRefused,
 Conflict. Every git call is a fixed argv; names and paths are checked before use.
 """
 
@@ -70,15 +71,20 @@ def _succeeds(cwd: Path, *args: str) -> bool:
     return True
 
 
-def prepare(repo: Path, root: Path, *, project: str, run_id: str, base: str = "HEAD") -> Worktree:
-    if not _PROJECT.match(project) or not _RUN_ID.match(run_id):
-        raise GitRefused("Nom de projet ou de run invalide pour une branche.")
+def check_repo_root(repo: Path) -> None:
+    """Refuse anything but the top folder of a Git repository."""
     try:
         top = Path(_git(repo, "rev-parse", "--show-toplevel").strip())
     except (GitRefused, OSError) as exc:
         raise GitRefused(f"« {repo} » n'est pas un dépôt Git.") from exc
     if top.resolve() != repo.resolve():
         raise GitRefused(f"« {repo} » n'est pas la racine d'un dépôt Git.")
+
+
+def prepare(repo: Path, root: Path, *, project: str, run_id: str, base: str = "HEAD") -> Worktree:
+    if not _PROJECT.match(project) or not _RUN_ID.match(run_id):
+        raise GitRefused("Nom de projet ou de run invalide pour une branche.")
+    check_repo_root(repo)
     branch = f"{BRANCH_PREFIX}{project}/{run_id}"
     if _succeeds(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"):
         raise GitRefused(f"La branche {branch} existe déjà : elle n'est pas réutilisée.")
@@ -113,6 +119,12 @@ def apply_files(
         _git(work.path, "add", "--all", "--", *targets, *removed)
 
 
+def adopt(work: Worktree) -> None:
+    """Stage what an agent wrote in the worktree, so new files count and later NFactory
+    writes see it as NFactory's own work."""
+    _git(work.path, "add", "--all")
+
+
 def manifest(work: Worktree) -> list[dict[str, str]]:
     """Files created, modified or deleted since the run's base commit."""
     raw = _git(work.path, "diff", "--name-status", "--no-renames", "-z", work.base)
@@ -126,6 +138,17 @@ def manifest(work: Worktree) -> list[dict[str, str]]:
 
 def diff(work: Worktree) -> str:
     return _git(work.path, "diff", "--no-renames", work.base)
+
+
+def tracked_files(work: Worktree) -> list[str]:
+    """Regular files in the index, sorted: no link, no submodule, nothing ignored."""
+    raw = _git(work.path, "ls-files", "--stage", "-z")
+    paths = []
+    for entry in filter(None, raw.split("\0")):
+        meta, _, path = entry.partition("\t")
+        if meta.split(" ", 1)[0] in ("100644", "100755"):
+            paths.append(_checked(path))
+    return sorted(paths)
 
 
 def commit(work: Worktree, message: str) -> str:

@@ -71,6 +71,13 @@ utilisateur : scripts/bridge.ps1 ─▶ pont 127.0.0.1:8765 (affiche un code d'a
 dashboard /providers ─POST /local-runtimes/pairing {code}─▶ api ─host.docker.internal─▶ pont /pair
   jeton ─▶ SecretStore (connexion local_bridge), jamais renvoyé ; le pont ne garde que son SHA-256
 dashboard ─GET /local-runtimes─▶ api ─Bearer─▶ pont /runtimes ─▶ codex/claude/gh --version + statut officiel
+utilisateur : bridge.ps1 -Allow <dossier> ─▶ repos.json (le navigateur ne voit que des noms)
+dashboard /agents ─POST /local-runtimes/tasks {repo_id, task, consent: true}─▶ api ─▶ pont /tasks
+  pont : git worktree + branche nfactory/<dépôt>/<tâche> ─▶ codex exec --json (sans réseau)
+  dashboard ─GET /local-runtimes/tasks/{id} toutes les 2 s─▶ événements réduits, manifeste, diff
+relais Claude : pont = worktree + brief ; l'utilisateur lance claude (bridge.ps1 -Handoff) ; POST …/collect
+test : POST /local-runtimes/tasks/{id}/checks ─▶ agent_checks + job check_agent_task
+  worker ─GET pont /tasks/{id}/snapshot─▶ Workspace jetable ─▶ superviseur sandbox (pytest) ─▶ JUnit ─▶ verdict
 ```
 
 Le pont refuse les navigateurs (`Origin`), les hôtes inconnus (rebinding DNS) et toute requête sans jeton, sauf `/health`. Aucune route n'exécute une commande issue de la requête.

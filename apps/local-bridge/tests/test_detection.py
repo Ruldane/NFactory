@@ -154,3 +154,48 @@ def test_a_status_printed_on_stderr_is_read_too() -> None:
     tools.answers[("codex", "login", "status")] = Completed(0, "", "Logged in using ChatGPT\n")
 
     assert by_kind(tools)["codex"]["login"] == "chatgpt"
+
+
+def test_the_newest_of_several_installs_is_chosen() -> None:
+    # Two Codex installs: an old npm shim first in the PATH, the current app second.
+    from nfactory_bridge.detection import newest
+
+    versions = {
+        "C:/nodejs/codex.CMD": Completed(0, "codex-cli 0.142.5\n"),
+        "C:/OpenAI/codex.exe": Completed(0, "codex-cli 0.155.1\n"),
+        "C:/broken/codex.exe": Completed(1, "", "boom"),
+    }
+
+    def run(argv: list[str], timeout_s: float) -> Completed:
+        assert argv[1:] == ["--version"]
+        return versions[argv[0]]
+
+    found = newest("codex", candidates=lambda name: list(versions), run=run)
+
+    assert found == "C:/OpenAI/codex.exe"
+
+
+def test_a_single_install_is_kept_even_without_a_readable_version() -> None:
+    from nfactory_bridge.detection import newest
+
+    found = newest(
+        "gh", candidates=lambda name: ["C:/gh.exe"], run=lambda argv, t: Completed(1, "")
+    )
+
+    assert found == "C:/gh.exe"
+    assert newest("gh", candidates=lambda name: [], run=lambda argv, t: Completed(0, "")) is None
+
+
+def test_every_install_on_the_path_is_found(tmp_path) -> None:
+    from nfactory_bridge.detection import which_all
+
+    first, second = tmp_path / "a", tmp_path / "b"
+    for folder in (first, second):
+        folder.mkdir()
+        tool = folder / ("tool.exe" if __import__("os").name == "nt" else "tool")
+        tool.write_text("")
+        tool.chmod(0o755)
+
+    found = which_all("tool", path=f"{first}{__import__('os').pathsep}{second}")
+
+    assert [__import__("pathlib").Path(p).parent for p in found] == [first, second]

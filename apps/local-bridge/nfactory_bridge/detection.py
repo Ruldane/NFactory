@@ -6,10 +6,12 @@ answers. Raw outputs stay here; only a status, a version and a login method leav
 
 Statuses: not_installed, installed (status unknown), needs_login, connected.
 `modes` says what NFactory may do with a tool; Claude Code is handoff only (spec §6.5).
-Interface: detect(which, run) -> list of runtimes; Completed; run_command (the real runner).
+Interface: detect(which, run) -> list of runtimes; newest and which_all (the install to use
+when several are on the PATH); Completed; run_command (the real runner).
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -76,7 +78,39 @@ def run_command(argv: list[str], timeout_s: float) -> Completed:
     return Completed(done.returncode, done.stdout, done.stderr)
 
 
-def detect(which: Which = shutil.which, run: Run = run_command) -> list[dict[str, Any]]:
+def which_all(name: str, path: str | None = None) -> list[str]:
+    """Every install of `name` on the PATH, in PATH order."""
+    found: list[str] = []
+    for folder in (path if path is not None else os.environ.get("PATH", "")).split(os.pathsep):
+        hit = shutil.which(name, path=folder) if folder else None
+        if hit and hit not in found:
+            found.append(hit)
+    return found
+
+
+def newest(
+    name: str,
+    *,
+    candidates: Callable[[str], list[str]] = which_all,
+    run: Run = run_command,
+) -> str | None:
+    """The install with the highest `--version`: an old copy first in the PATH (an npm
+    shim next to a current app, say) must not shadow the one the user keeps up to date."""
+    paths = candidates(name)
+    if len(paths) <= 1:
+        return paths[0] if paths else None
+    ranked: list[tuple[tuple[int, ...], int, str]] = []
+    for order, candidate in enumerate(paths):
+        try:
+            match = _VERSION.search(run([candidate, "--version"], STATUS_TIMEOUT_S).stdout)
+        except (OSError, subprocess.TimeoutExpired):
+            match = None
+        version = tuple(int(part) for part in match.group(0).split(".")) if match else ()
+        ranked.append((version, -order, candidate))
+    return max(ranked)[2]
+
+
+def detect(which: Which = newest, run: Run = run_command) -> list[dict[str, Any]]:
     return [_detect(tool, which, run) for tool in _TOOLS]
 
 

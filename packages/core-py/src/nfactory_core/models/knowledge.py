@@ -33,6 +33,12 @@ class Document(Base):
     expires_at: Mapped[datetime | None] = optional_timestamp()
     created_at: Mapped[datetime] = created_column()
 
+    # Lookups made on every upload: same file (dedup) or same path (new revision).
+    __table_args__ = (
+        Index("ix_documents_scope_checksum", "workspace_id", "checksum"),
+        Index("ix_documents_scope_path", "workspace_id", "path"),
+    )
+
 
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"

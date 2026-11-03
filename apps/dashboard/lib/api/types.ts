@@ -349,3 +349,73 @@ export interface LocalRuntimesView {
   bridge: { status: BridgeStatus; message: string; version: string | null };
   runtimes: LocalRuntime[];
 }
+
+// Coding-agent tasks on an authorized repository of the user's machine (tasks 4.3, 4.4):
+// the user's Codex, or a handoff they run in their own Claude Code.
+export type AgentRuntime = "codex" | "claude";
+
+export interface LocalRepo {
+  id: string;
+  name: string;
+}
+
+export type AgentTaskStatus =
+  | "preparing"
+  | "running"
+  | "awaiting_user"
+  | "succeeded"
+  | "no_changes"
+  | "failed"
+  | "cancelled"
+  | "discarded";
+
+export interface AgentEvent {
+  type: "started" | "message" | "command" | "file_change" | "completed" | "failed" | "error" | "warning";
+  text?: string;
+  message?: string;
+  command?: string;
+  status?: string;
+  exit_code?: number | null;
+  changes?: { path: string; kind: string }[];
+  usage?: Record<string, number>;
+}
+
+export interface AgentTask {
+  id: string;
+  runtime: AgentRuntime;
+  repo_id: string;
+  branch: string;
+  base: string;
+  status: AgentTaskStatus;
+  events: AgentEvent[];
+  manifest: { path: string; change: "added" | "modified" | "deleted" }[];
+  diff: string;
+  diff_truncated: boolean;
+  error: string;
+  created_at: number;
+}
+
+// A sandbox check of a task's change (task 4.4): the verdict comes from the JUnit report.
+export type AgentCheckStatus = "queued" | "running" | "passed" | "failed" | "not_tested" | "error";
+
+export interface AgentCheckReport {
+  command: string;
+  passed: number;
+  failed: number;
+  errors: number;
+  skipped: number;
+  failures: { name: string; message: string }[];
+  output_tail: string;
+}
+
+export interface AgentCheck {
+  id: string;
+  task_id: string;
+  repo_id: string;
+  runtime: string;
+  status: AgentCheckStatus;
+  report: AgentCheckReport | null;
+  error: string;
+  created_at: string;
+  finished_at: string | null;
+}

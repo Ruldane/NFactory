@@ -24,3 +24,5 @@ RUN_QUEUE = "factory-runs"
 RUN_JOB = "run_factory"
 # Computes missing knowledge vectors of one workspace (ADR-0007).
 INDEX_JOB = "index_knowledge"
+# Tests a coding agent's change in the sandbox (task 4.4).
+AGENT_CHECK_JOB = "check_agent_task"

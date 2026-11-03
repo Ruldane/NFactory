@@ -3,6 +3,7 @@
 Importing this package registers every table on `Base.metadata` (used by Alembic).
 """
 
+from nfactory_core.models.agents import AgentCheck
 from nfactory_core.models.artifacts import Artifact
 from nfactory_core.models.audit import AuditLog
 from nfactory_core.models.base import Base
@@ -16,6 +17,7 @@ from nfactory_core.models.runs import Approval, EventRecord, Run, RunStep
 from nfactory_core.models.templates import TemplateVersion
 
 __all__ = [
+    "AgentCheck",
     "Approval",
     "Artifact",
     "AuditLog",

@@ -15,7 +15,7 @@ NFactory is a local-first AI software factory: a user describes a need, and a **
 | `apps/api` | `app`: FastAPI under `/api/v1`. HTTP lives in `routes/`, use cases in `services/`, contracts in `schemas/`. Also Alembic migrations and the demo seed. |
 | `apps/worker` | `nfactory_worker`: ARQ job (`jobs/`), LangGraph pipeline (`pipeline/`), agents, recipes, runner (`LocalRunner`, `SandboxRunner`), artifacts, providers. |
 | `apps/sandbox` | `nfactory_sandbox`: the sandbox supervisor (standard library). It runs each recipe check in a throwaway container of the sandbox image: no network, read-only, only that run's workspace (ADR-0005 v2). The image holds Python, pwsh + Pester + PSScriptAnalyzer, Node + `web-deps`. |
-| `apps/local-bridge` | `nfactory_bridge`: the local bridge (standard library), run on the user's machine outside Docker (`scripts/bridge.ps1`). Loopback only, paired token, no shell; detects `codex` / `claude` / `gh` through their public commands (ADR-0008). |
+| `apps/local-bridge` | `nfactory_bridge`: the local bridge (standard library), run on the user's machine outside Docker (`scripts/bridge.ps1`). Loopback only, paired token, no shell; detects `codex` / `claude` / `gh` through their public commands, and runs Codex on a repository the user authorized (`-Allow`), in a git worktree, with consent per task, or prepares a Claude Code handoff the user runs themselves (ADR-0008). |
 | `apps/dashboard` | Next.js 16 UI. It has its own `AGENTS.md`; read it before touching the frontend. |
 | `scripts/` | bootstrap, dev, check, doctor, smoke test. |
 
@@ -53,6 +53,7 @@ Each project type is one recipe, and the pipeline never changes for a new one.
   - Commands come only from recipes, through the runner's allow-list.
   - Brief values enter generated code as Python literals (`repr`), and identifiers are regex-validated.
   - The sandbox has no network.
+- **Coding agents on the user's repository.** A task needs `consent: true` from the dashboard checkbox. The bridge resolves repositories by id from its own allow-list; no request carries a path. The agent works in a `nfactory/` worktree and never commits or pushes. Its change is tested by the worker in the sandbox (`check_agent_task`), never on the bridge; NFactory never launches `claude` for the user.
 - **External actions.**
   - Commit only when the user asks.
   - Push, PRs, remotes and deploys wait for explicit user approval. The code lives on the public `Ruldane/NFactory` (`origin`); NFactory's own draft-PR tests target only the private `Ruldane/nfactory-test`.

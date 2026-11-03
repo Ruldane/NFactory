@@ -5,10 +5,11 @@ only; the API reaches it as host.docker.internal. Pairing trades the one-time co
 bridge printed for a token, stored encrypted in the SecretStore (a `local_bridge`
 connection) and never sent back. The API only relays what the bridge detected.
 
-Interface: local_runtimes / pair / unpair, BridgeClient (the port), HttpBridge (its
+Interface: local_runtimes / pair / unpair / paired_token, BridgeClient (the port), HttpBridge (its
 adapter), BridgeUnreachable / BridgeUnauthorized / BridgeRefused.
 """
 
+import re
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -25,10 +26,10 @@ from app.schemas.local_runtimes import (
 )
 from app.services.identity import RequestContext
 from nfactory_core.connections import workspace_connections
+from nfactory_core.local_bridge import KIND, bridge_token
 from nfactory_core.models import ProviderConnection
 from nfactory_core.secrets import SecretStore, SecretUnreadableError
 
-KIND = "local_bridge"
 _TIMEOUT_S = 30.0  # detection runs a few official commands on the user's machine
 START_HINT = (
     "Pont local non joignable : lancez ./scripts/bridge.ps1 (ou scripts/bridge.sh) "
@@ -52,7 +53,12 @@ class BridgeUnauthorized(Exception):
 
 
 class BridgeRefused(Exception):
-    """The bridge refused the pairing code; the message is the bridge's (French)."""
+    """The bridge refused a request (a pairing code, a task); its code, status and French
+    message are kept so the user reads the bridge's own reason."""
+
+    def __init__(self, message: str, *, code: str = "pairing_refused", status: int = 403) -> None:
+        super().__init__(message)
+        self.code, self.status = code, status
 
 
 class BridgeClient(Protocol):
@@ -60,6 +66,9 @@ class BridgeClient(Protocol):
     async def pair(self, code: str) -> str: ...
     async def runtimes(self, token: str) -> list[dict[str, Any]]: ...
     async def unpair(self, token: str) -> None: ...
+    async def repos(self, token: str) -> list[dict[str, Any]]: ...
+    async def start_task(self, token: str, body: dict[str, Any]) -> dict[str, Any]: ...
+    async def task(self, token: str, task_id: str, action: str | None = None) -> dict[str, Any]: ...
 
 
 class HttpBridge:
@@ -85,8 +94,30 @@ class HttpBridge:
     async def unpair(self, token: str) -> None:
         await self._call("DELETE", "/pair", token=token)
 
+    async def repos(self, token: str) -> list[dict[str, Any]]:
+        body = await self._call("GET", "/repos", token=token, refusals=True)
+        found = body.get("repos") if isinstance(body, dict) else None
+        return found if isinstance(found, list) else []
+
+    async def start_task(self, token: str, body: dict[str, Any]) -> dict[str, Any]:
+        answer = await self._call("POST", "/tasks", token=token, json=body, refusals=True)
+        return answer if isinstance(answer, dict) else {}
+
+    async def task(self, token: str, task_id: str, action: str | None = None) -> dict[str, Any]:
+        method, path = (
+            ("POST", f"/tasks/{task_id}/{action}") if action else ("GET", f"/tasks/{task_id}")
+        )
+        answer = await self._call(method, path, token=token, refusals=True)
+        return answer if isinstance(answer, dict) else {}
+
     async def _call(
-        self, method: str, path: str, *, token: str | None = None, json: Any = None
+        self,
+        method: str,
+        path: str,
+        *,
+        token: str | None = None,
+        json: Any = None,
+        refusals: bool = False,
     ) -> Any:
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         try:
@@ -100,9 +131,15 @@ class HttpBridge:
             raise BridgeUnauthorized
         if response.status_code == 403 and path == "/pair":
             raise BridgeRefused(_bridge_message(response))
+        if refusals and 400 <= response.status_code < 500:
+            code = _bridge_code(response)
+            if code is not None:
+                raise BridgeRefused(
+                    _bridge_message(response), code=code, status=response.status_code
+                )
         if response.status_code == 204:
             return None
-        if response.status_code != 200:
+        if response.status_code not in (200, 202):
             raise BridgeUnreachable
         try:
             return response.json()
@@ -183,6 +220,13 @@ async def unpair(
     await session.commit()
 
 
+async def paired_token(
+    session: AsyncSession, ctx: RequestContext, store: SecretStore
+) -> str | None:
+    """The bridge token, read at the last moment; None when not paired."""
+    return await bridge_token(session, ctx.default_workspace_id, store)
+
+
 async def _connection(session: AsyncSession, ctx: RequestContext) -> ProviderConnection | None:
     return (await workspace_connections(session, ctx.default_workspace_id)).get(KIND)
 
@@ -211,6 +255,14 @@ def _bridge_message(response: httpx.Response) -> str:
     except (ValueError, KeyError, TypeError):
         message = None
     return message[:200] if isinstance(message, str) else "Code d'appairage refusé."
+
+
+def _bridge_code(response: httpx.Response) -> str | None:
+    try:
+        code = response.json()["error"]["code"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    return code if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,40}", code) else None
 
 
 def _out(

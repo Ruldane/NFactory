@@ -22,7 +22,7 @@ const LOGINS: Record<string, string> = {
 
 const MODES: Record<string, Record<string, string>> = {
   runtime: {
-    available: "Pilotable par NFactory avec votre accord à chaque tâche (tâche 4.3, à venir)",
+    available: "Pilotable par NFactory avec votre accord à chaque tâche (page Agents de code)",
     blocked_by_policy: "Pilotage automatique bloqué : conformité de l'abonnement à vérifier",
   },
   handoff: {

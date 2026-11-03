@@ -157,6 +157,6 @@ def test_unknown_routes_and_methods(bridge: Bridge) -> None:
 
 
 def test_a_large_body_is_refused(bridge: Bridge) -> None:
-    status, _ = bridge.call("POST", "/pair", {"code": "x" * 20_000})
+    status, _ = bridge.call("POST", "/pair", {"code": "x" * 40_000})
 
     assert status == 413
