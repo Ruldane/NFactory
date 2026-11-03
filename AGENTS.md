@@ -55,7 +55,7 @@ Each project type is one recipe, and the pipeline never changes for a new one.
   - The sandbox has no network.
 - **External actions.**
   - Commit only when the user asks.
-  - Push, PRs, remotes and deploys wait for explicit user approval. The GitHub remote is deferred.
+  - Push, PRs, remotes and deploys wait for explicit user approval. The code lives on the public `Ruldane/NFactory` (`origin`); NFactory's own draft-PR tests target only the private `Ruldane/nfactory-test`.
   - No auto-merge.
   - No silent fallback to an external LLM provider.
 - **Docker.** `docker.sock` is mounted only into `sandbox-supervisor`, never into `api` or `worker`. The supervisor builds every container spec itself; nothing in a request sets a container option. All ports bind to `127.0.0.1`. The supervisor publishes no port and gets only `NFACTORY_SANDBOX_TOKEN` from `.env`. A preview of a generated app (`RenderedProject.preview`) runs on the internal `nfactory_preview` network with its workspace read-only; `preview-gateway` (no socket, no secret, port 8090, another origin than the dashboard) is its only way in.

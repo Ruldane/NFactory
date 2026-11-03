@@ -195,7 +195,7 @@ SSO, RBAC étendu, connector SDK, MCP optionnel, packs de templates, déploiemen
 | **Avant la phase 0.4** | Démarrer Docker Desktop | lancer l'application Docker Desktop |
 | Phase 2 (facultatif) | Fournir les clés API des providers à tester en réel | saisie dans l'UI ou `.env` |
 | Phase 4 | ~~Installer et connecter GitHub CLI~~ fait le 2026-11-02 (gh 2.103.3, connecté) | `winget install GitHub.cli` puis `gh auth login` |
-| Phase 4 | Fournir un **dépôt de test** autorisé pour les PR | — |
+| Phase 4 | ~~Fournir un **dépôt de test** autorisé pour les PR~~ fourni le 2026-11-03 : `Ruldane/nfactory-test` (privé, vide) | — |
 | Phase 4 | ~~Vérifier que Codex est connecté (flux officiel)~~ vérifié le 2026-11-02 par le pont (compte ChatGPT) | `codex login` |
 | Phase 4 | Décision sur Claude Code piloté sur abonnement après lecture de *Legal and compliance* | handoff par défaut en attendant |
 | Facultatif | PowerShell 7 sur l'hôte (sinon tout passe par la sandbox) | `winget install Microsoft.PowerShell` |
@@ -317,4 +317,5 @@ uv run python scripts/smoke_test.py  # bout en bout sur la stack lancée
 - `gh` 2.103.3 installé et connecté par l'utilisateur ; le pont le détecte (`connected`). Deux Codex sur le poste (0.155.1 de l'application OpenAI, 0.142.5 dans `C:\nvm4w\nodejs`, prioritaire dans le PATH) : signalé.
 - 4.5 : travail Git en worktree (voir le tableau). Test instable trouvé et corrigé : le pont répondait 413 avant d'avoir lu le corps refusé, et Windows coupait parfois la connexion (2 échecs sur 300 essais, 0 après correctif).
 - Preuves 4.5 : `check.ps1` vert (820 tests Python + 6 tests live ignorés sans clé, 120 tests dashboard, ruff, mypy, ESLint, tsc).
-- **Prochaine étape :** liste de dépôts autorisés côté pont, puis 4.3 (Codex : petit patch avec accord) et 4.4 (relais Claude Code). Besoin de l'utilisateur : un dépôt de test autorisé pour les PR (4.6), et son accord avant un essai réel de Codex (quota ChatGPT).
+- 2026-11-03 : à la demande de l'utilisateur, le code est publié sur le dépôt public `Ruldane/NFactory` (commit initial `a10b27a`, branche `main`, sans force). Avant publication : 511 fichiers passés au scanner de secrets de NFactory (seules des clés de test factices et le mot de passe Postgres de développement local), aucun chemin personnel ni courriel, `.env` exclu par `.gitignore`. Dépôt de test des PR fourni : `Ruldane/nfactory-test` (privé, vide).
+- **Prochaine étape :** liste de dépôts autorisés côté pont, puis 4.4 (relais Claude Code) et 4.3 (Codex : petit patch). Besoin de l'utilisateur : son accord avant un essai réel de Codex (quota ChatGPT).

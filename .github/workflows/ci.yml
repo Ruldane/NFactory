@@ -21,15 +21,20 @@ jobs:
         ports: ["55432:5432"]
         options: >-
           --health-cmd "pg_isready -U nfactory" --health-interval 3s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["56379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 3s --health-retries 20
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3  # setup-uv publishes full tags only
         with:
           version: "0.12.22"
       - run: uv sync --all-packages --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run mypy packages/core-py/src apps/api/app apps/worker/nfactory_worker
+      - run: uv run mypy packages/core-py/src apps/api/app apps/worker/nfactory_worker apps/local-bridge/nfactory_bridge
       - run: uv run pytest
 
   dashboard:
