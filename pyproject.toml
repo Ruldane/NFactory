@@ -1,0 +1,60 @@
+[project]
+name = "nfactory"
+version = "0.1.0"
+description = "NFactory — AI Software Factory local-first (racine du workspace)"
+requires-python = ">=3.13,<3.14"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/core-py", "apps/api", "apps/worker"]
+
+[tool.uv.sources]
+nfactory-core = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "ruff",
+    "mypy",
+    "openpyxl>=3.1.5",
+    "python-docx>=1.2.0",
+    "respx>=0.23.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["apps/dashboard", "templates"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF"]
+ignore = ["S101"]  # assert autorisé dans les tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["nfactory_core", "app", "nfactory_worker", "nfactory_sandbox", "nfactory_bridge"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S"]
+"**/migrations/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+exclude = ["migrations/", "tests/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "--import-mode=importlib"
+testpaths = ["packages/core-py/tests", "apps/api/tests", "apps/worker/tests", "apps/sandbox/tests", "apps/local-bridge/tests", "scripts/tests"]
+markers = [
+    "integration: nécessite PostgreSQL/Redis (lancés par scripts/check)",
+    "live: appelle un vrai fournisseur ; seulement avec NFACTORY_LIVE_TESTS=1 et sa clé",
+]

@@ -1,0 +1,37 @@
+"""Excel export of /{{plural}}: a real workbook, read back with openpyxl."""
+
+from io import BytesIO
+
+from fastapi.testclient import TestClient
+from openpyxl import load_workbook
+
+URL = "/{{plural}}"
+PAYLOAD = {{payload}}
+HEADERS = {{headers}}
+
+
+def test_export_is_a_workbook_with_one_row_per_item(client: TestClient) -> None:
+    for _ in range(2):
+        assert client.post(URL, json=PAYLOAD).status_code == 201
+
+    response = client.get(f"{URL}/export.xlsx")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.openxmlformats")
+    assert "attachment" in response.headers["content-disposition"]
+    sheet = load_workbook(BytesIO(response.content)).active
+    assert sheet is not None
+    rows = list(sheet.iter_rows(values_only=True))
+    assert list(rows[0]) == HEADERS
+    assert [row[0] for row in rows[1:]] == [1, 2]
+
+
+def test_an_empty_export_keeps_its_header(client: TestClient) -> None:
+    sheet = load_workbook(BytesIO(client.get(f"{URL}/export.xlsx").content)).active
+    assert sheet is not None
+    assert [list(row) for row in sheet.iter_rows(values_only=True)] == [HEADERS]
+
+
+def test_the_export_is_not_mistaken_for_an_item(client: TestClient) -> None:
+    # /{{plural}}/export.xlsx must reach the export, not the "/{id}" route.
+    assert client.get(f"{URL}/export.xlsx").status_code == 200

@@ -1,0 +1,16 @@
+# Static analysis of the project with PSScriptAnalyzer: any warning or error fails.
+$ErrorActionPreference = 'Stop'
+Import-Module PSScriptAnalyzer
+
+# Pester shares variables between its blocks, which this rule cannot follow: tests skip it.
+$findings = @(
+    Invoke-ScriptAnalyzer -Path . -Severity Warning, Error
+    Invoke-ScriptAnalyzer -Path tools -Severity Warning, Error
+    Invoke-ScriptAnalyzer -Path tests -Severity Warning, Error -ExcludeRule PSUseDeclaredVarsMoreThanAssignments
+)
+if ($findings.Count -gt 0) {
+    $findings | Format-Table -Property RuleName, Severity, ScriptName, Line, Message -AutoSize -Wrap |
+        Out-String -Width 200 | Write-Output
+    exit 1
+}
+Write-Output 'Analyse statique : aucun problème.'

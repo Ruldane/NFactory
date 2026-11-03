@@ -1,0 +1,49 @@
+# {{title}}
+
+{{summary}}
+
+Projet généré par NFactory (recette `powershell-automation` {{version}}).
+
+## Ce que fait le script
+
+`{{script}}` lit un fichier CSV, contrôle chaque ligne et écrit un rapport CSV. Chaque ligne
+du rapport reprend les colonnes d'entrée et ajoute :
+
+- **Statut contrôle** : `OK` ou `Invalide` ;
+- **Détail contrôle** : la ou les colonnes en cause.
+
+Une ligne invalide est signalée, jamais supprimée, et le traitement continue.
+
+{{columns_table}}
+
+## Utilisation
+
+PowerShell 7 recommandé (`pwsh`). Le script fonctionne aussi avec Windows PowerShell 5.1.
+
+```powershell
+# Essai à blanc : rien n'est écrit, le journal indique ce qui serait fait
+./{{script}} -InputPath {{sample}} -OutputPath {{report}} -WhatIf -Verbose
+
+# Exécution réelle, avec journal
+./{{script}} -InputPath {{sample}} -OutputPath {{report}} -LogPath logs/traitement.log
+```
+
+`{{sample}}` contient des données de démonstration synthétiques, dont une ligne volontairement
+invalide.
+
+## Permissions et sécurité
+
+- Le script **ne contacte aucune machine distante** et n'ouvre aucune session (`Invoke-Command`,
+  `-ComputerName`…) ; un test le vérifie dans l'arbre syntaxique.
+- Il ne demande **aucun privilège administrateur** et ne modifie que le rapport et le journal.
+- Lancez-le avec un compte standard. Avant tout usage sur un parc réel, faites relire le script et
+  obtenez l'accord des responsables des machines concernées.
+
+## Tests
+
+```powershell
+Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser
+Install-Module PSScriptAnalyzer -Scope CurrentUser
+./tools/Invoke-Analysis.ps1   # analyse statique
+./tools/Invoke-Tests.ps1      # tests Pester, rapport JUnit dans .nfactory/junit.xml
+```

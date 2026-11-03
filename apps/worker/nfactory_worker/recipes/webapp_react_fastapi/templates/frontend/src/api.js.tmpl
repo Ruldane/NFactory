@@ -1,0 +1,55 @@
+// Client of the FastAPI backend. Every failure becomes an ApiError with a French message.
+
+export class ApiError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+// FastAPI validation errors (422) list each invalid field; other errors carry `detail`.
+export function errorMessage(status, body, labels = {}) {
+  const detail = body?.detail;
+  if (status === 422 && Array.isArray(detail)) {
+    const fields = detail.map((item) => {
+      const name = item?.loc?.[item.loc.length - 1];
+      return labels[name] ?? name ?? "champ";
+    });
+    return `Valeurs refusées : ${[...new Set(fields)].join(", ")}.`;
+  }
+  if (typeof detail === "string") return detail;
+  return `Erreur du serveur (${status}).`;
+}
+
+// BASE_URL is "./" in a build (relative): /api/... then resolves under any path prefix.
+const API_BASE = `${import.meta.env.BASE_URL ?? "/"}api`.replace(/^\.\//, "");
+
+/** Where the browser downloads the Excel export of a resource. */
+export function exportUrl(plural, base = API_BASE) {
+  return `${base}/${plural}/export.xlsx`;
+}
+
+export function createClient({ base = API_BASE, fetcher = globalThis.fetch, labels = {} } = {}) {
+  async function request(path, init = {}) {
+    let response;
+    try {
+      response = await fetcher(`${base}${path}`, {
+        ...init,
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+      });
+    } catch {
+      throw new ApiError(0, "Le serveur ne répond pas. Vérifiez que l'API est démarrée.");
+    }
+    if (response.status === 204) return null;
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new ApiError(response.status, errorMessage(response.status, body, labels));
+    return body;
+  }
+
+  return {
+    list: (plural) => request(`/${plural}`),
+    create: (plural, item) => request(`/${plural}`, { method: "POST", body: JSON.stringify(item) }),
+    remove: (plural, id) => request(`/${plural}/${id}`, { method: "DELETE" }),
+  };
+}

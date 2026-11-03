@@ -1,0 +1,25 @@
+# docker compose up --build, then open http://127.0.0.1:8080
+services:
+  backend:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  data:

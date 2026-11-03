@@ -1,0 +1,51 @@
+import { useState } from "react";
+
+import { INPUT_TYPES, emptyValues, toPayload } from "./fields.js";
+
+export function ItemForm({ entity, onCreate }) {
+  const [values, setValues] = useState(() => emptyValues(entity.fields));
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onCreate(toPayload(entity.fields, values));
+      setValues(emptyValues(entity.fields));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="item-form" onSubmit={submit} aria-label={`Ajouter : ${entity.label}`}>
+      {entity.fields.map((field) => {
+        const id = `field-${field.name}`;
+        const checkbox = field.type === "bool";
+        return (
+          <div key={field.name} className={checkbox ? "field field-check" : "field"}>
+            <label htmlFor={id}>{field.label}</label>
+            <input
+              id={id}
+              name={field.name}
+              type={INPUT_TYPES[field.type]}
+              step={field.type === "float" ? "any" : undefined}
+              required={!checkbox}
+              checked={checkbox ? values[field.name] : undefined}
+              value={checkbox ? undefined : values[field.name]}
+              onChange={(e) =>
+                setValues((current) => ({
+                  ...current,
+                  [field.name]: checkbox ? e.target.checked : e.target.value,
+                }))
+              }
+            />
+          </div>
+        );
+      })}
+      <button type="submit" disabled={saving}>
+        {saving ? "Enregistrement…" : "Ajouter"}
+      </button>
+    </form>
+  );
+}

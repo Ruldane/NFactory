@@ -1,0 +1,47 @@
+import { describe, expect, it } from "vitest";
+
+import { ApiError, createClient, errorMessage, exportUrl } from "./api.js";
+
+describe("errorMessage", () => {
+  it("names each refused field once, by its label", () => {
+    const body = { detail: [{ loc: ["body", "nom"] }, { loc: ["body", "nom"] }, { loc: ["body", "x"] }] };
+    expect(errorMessage(422, body, { nom: "Nom" })).toBe("Valeurs refusées : Nom, x.");
+  });
+
+  it("keeps the server's own message", () => {
+    expect(errorMessage(404, { detail: "Introuvable" })).toBe("Introuvable");
+  });
+
+  it("falls back to the status code", () => {
+    expect(errorMessage(500, null)).toBe("Erreur du serveur (500).");
+  });
+});
+
+describe("createClient", () => {
+  it("turns a network failure into an ApiError", async () => {
+    const client = createClient({
+      fetcher: async () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    await expect(client.list("items")).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("calls the backend under /api", async () => {
+    const urls = [];
+    const client = createClient({
+      fetcher: async (url) => {
+        urls.push(url);
+        return { status: 200, ok: true, json: async () => [] };
+      },
+    });
+    await client.list("items");
+    expect(urls).toEqual(["/api/items"]);
+  });
+});
+
+describe("exportUrl", () => {
+  it("points at the Excel export of a resource", () => {
+    expect(exportUrl("items")).toBe("/api/items/export.xlsx");
+  });
+});

@@ -1,0 +1,27 @@
+// How each field type is edited in the form, shown in the table and sent to the API.
+
+export const INPUT_TYPES = { str: "text", int: "number", float: "number", date: "date", bool: "checkbox" };
+
+export function emptyValues(fields) {
+  return Object.fromEntries(fields.map((f) => [f.name, f.type === "bool" ? false : ""]));
+}
+
+export function toPayload(fields, values) {
+  return Object.fromEntries(
+    fields.map((f) => {
+      const raw = values[f.name];
+      if (f.type === "int") return [f.name, Number.parseInt(raw, 10)];
+      if (f.type === "float") return [f.name, Number.parseFloat(raw)];
+      if (f.type === "bool") return [f.name, Boolean(raw)];
+      return [f.name, raw];
+    }),
+  );
+}
+
+export function display(field, value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (field.type === "bool") return value ? "Oui" : "Non";
+  if (field.type === "date") return new Date(`${value}T00:00:00`).toLocaleDateString("fr-FR");
+  if (field.type === "float") return Number(value).toLocaleString("fr-FR");
+  return String(value);
+}

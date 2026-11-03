@@ -1,0 +1,55 @@
+# {{title}}
+
+{{summary}}
+
+Projet généré par NFactory (recette `python-api` v{{version}}).
+
+## Contenu
+
+- API FastAPI : ressource `/{{plural}}` (liste paginée, création, lecture, remplacement, suppression).
+- Base SQLite par défaut (variable `DATABASE_URL` pour en changer), schéma géré par des migrations Alembic (`migrations/`).
+- Documentation OpenAPI : http://127.0.0.1:8000/docs
+- Tests pytest dans `tests/`.
+
+## Champs
+
+{{fields_table}}
+
+## Démarrer
+
+```bash
+uv sync
+uv run alembic upgrade head   # facultatif : l'API applique aussi les migrations au démarrage
+uv run uvicorn app.main:app --reload
+```
+
+## Faire évoluer le schéma
+
+Modifiez `app/models.py`, puis :
+
+```bash
+uv run alembic revision --autogenerate -m "description du changement"
+uv run alembic upgrade head
+```
+
+Le test `tests/test_migrations.py` vérifie que les migrations construisent exactement le schéma des modèles.
+
+## Vérifier
+
+```bash
+uv run ruff check .
+uv run pytest
+```
+
+## Exemples
+
+```bash
+curl http://127.0.0.1:8000/health
+curl -X POST http://127.0.0.1:8000/{{plural}} -H "Content-Type: application/json" -d '{{payload_json}}'
+curl http://127.0.0.1:8000/{{plural}}
+```
+
+## Limites connues
+
+- **Aucune authentification** : à ajouter avant toute exposition hors de votre poste.
+- SQLite convient à un poste ; pour plusieurs utilisateurs, passez à PostgreSQL via `DATABASE_URL`.

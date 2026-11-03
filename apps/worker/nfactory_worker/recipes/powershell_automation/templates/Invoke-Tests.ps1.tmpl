@@ -1,0 +1,12 @@
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
+# Runs the Pester tests and writes a JUnit report; a failing test fails the command.
+$ErrorActionPreference = 'Stop'
+
+$config = New-PesterConfiguration
+$config.Run.Path = 'tests'
+$config.Run.Exit = $true
+$config.Output.Verbosity = 'Detailed'
+$config.TestResult.Enabled = $true
+$config.TestResult.OutputFormat = 'JUnitXml'
+$config.TestResult.OutputPath = {{junit}}
+Invoke-Pester -Configuration $config

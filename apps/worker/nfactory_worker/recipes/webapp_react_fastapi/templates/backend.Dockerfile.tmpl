@@ -1,0 +1,14 @@
+# FastAPI backend. The SQLite database lives in /data (a volume in compose.yaml).
+FROM python:3.13-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DATABASE_URL=sqlite:////data/app.db
+WORKDIR /app
+COPY pyproject.toml ./
+COPY app ./app
+COPY migrations ./migrations
+COPY alembic.ini ./
+RUN pip install --no-cache-dir . \
+    && useradd --uid 10001 --no-create-home app \
+    && mkdir /data && chown app /data
+USER app
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

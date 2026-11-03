@@ -1,0 +1,27 @@
+# {{title}}
+
+{{kind}} générée par NFactory (recette `document` v{{version}}).
+
+## Ce que vous obtenez
+
+- `output/{{output_name}}` : le document Word.
+- `content/document.md` : la source, à modifier dans n'importe quel éditeur de texte.
+- `content/outline.json` : le plan attendu (titre et sections), qui sert aux contrôles.
+- `build_document.py` : le script qui régénère le `.docx` depuis la source.
+
+Les passages marqués **« À compléter »** n'ont pas pu être rédigés à partir de votre demande. Complétez-les avant diffusion.
+
+## Régénérer le document
+
+```bash
+uv sync
+uv run python build_document.py
+```
+
+## Vérifier
+
+```bash
+uv run pytest
+```
+
+Les tests vérifient que le titre, l'ordre des sections et les listes du document Word correspondent à la source, et qu'aucune section n'est vide.

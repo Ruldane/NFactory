@@ -1,0 +1,57 @@
+"""Check the Word document against its outline and its Markdown source."""
+
+from pathlib import Path
+
+import pytest
+from docx import Document
+from docx.document import Document as DocxDocument
+
+from build_document import OUTLINE, SOURCE, build
+
+
+@pytest.fixture(scope="module")
+def document(tmp_path_factory: pytest.TempPathFactory) -> DocxDocument:
+    path: Path = build(output=tmp_path_factory.mktemp("out") / "document.docx")
+    return Document(str(path))
+
+
+def texts_with_style(document: DocxDocument, style: str) -> list[str]:
+    return [p.text for p in document.paragraphs if p.style is not None and p.style.name == style]
+
+
+def test_title_matches_the_outline(document: DocxDocument) -> None:
+    assert texts_with_style(document, "Title") == [OUTLINE["title"]]
+    assert document.core_properties.title == OUTLINE["title"]
+
+
+def test_sections_follow_the_outline_in_order(document: DocxDocument) -> None:
+    assert texts_with_style(document, "Heading 1") == OUTLINE["sections"]
+
+
+def test_no_section_is_empty(document: DocxDocument) -> None:
+    current = None
+    filled: dict[str, int] = {}
+    for paragraph in document.paragraphs:
+        style = paragraph.style.name if paragraph.style is not None else ""
+        if style == "Heading 1":
+            current = paragraph.text
+            filled[current] = 0
+        elif current is not None and paragraph.text.strip():
+            filled[current] += 1
+    assert filled
+    assert [name for name, count in filled.items() if count == 0] == []
+
+
+def test_every_bullet_of_the_source_is_in_the_document(document: DocxDocument) -> None:
+    bullets = [
+        line[2:].strip()
+        for line in SOURCE.read_text(encoding="utf-8").splitlines()
+        if line.startswith("- ")
+    ]
+    assert texts_with_style(document, "List Bullet") == bullets
+
+
+def test_items_to_complete_are_carried_over(document: DocxDocument) -> None:
+    source = SOURCE.read_text(encoding="utf-8").count("À compléter")
+    rendered = sum(p.text.count("À compléter") for p in document.paragraphs)
+    assert rendered == source

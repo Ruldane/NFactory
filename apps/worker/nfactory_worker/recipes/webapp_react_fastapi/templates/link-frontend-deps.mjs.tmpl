@@ -1,0 +1,39 @@
+// Prepares frontend/node_modules without Internet access.
+//
+// In the NFactory sandbox, NFACTORY_WEB_DEPS points to the preinstalled toolchain: each
+// package is linked into a real frontend/node_modules folder (tools write their caches
+// there). Elsewhere, run `npm install` in frontend/ instead.
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+
+const target = join("frontend", "node_modules");
+const source = process.env.NFACTORY_WEB_DEPS;
+
+if (existsSync(target)) {
+  console.log("frontend/node_modules existe déjà : rien à lier.");
+  process.exit(0);
+}
+if (!source || !existsSync(source)) {
+  console.error("Dépendances absentes : lancez `npm install` dans le dossier frontend.");
+  process.exit(1);
+}
+
+// The preinstalled versions must be the ones this project pins.
+const manifest = JSON.parse(readFileSync(join("frontend", "package.json"), "utf8"));
+const wanted = { ...manifest.dependencies, ...manifest.devDependencies };
+const mismatches = Object.entries(wanted).flatMap(([name, version]) => {
+  const file = join(source, name, "package.json");
+  const found = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).version : "absent";
+  return found === version ? [] : [`${name} : ${version} attendu, ${found} installé`];
+});
+if (mismatches.length > 0) {
+  console.error(`Versions différentes de la boîte à outils du bac à sable :\n${mismatches.join("\n")}`);
+  process.exit(1);
+}
+
+mkdirSync(target);
+for (const name of readdirSync(source)) {
+  if (name.startsWith(".")) continue;
+  symlinkSync(join(source, name), join(target, name), "junction");
+}
+console.log(`${Object.keys(wanted).length} dépendances liées depuis la boîte à outils du bac à sable.`);

@@ -1,0 +1,54 @@
+"""Render content/document.md into a Word document.
+
+Run: python build_document.py   (writes the .docx named in content/outline.json)
+Edit content/document.md, then run again. Supported Markdown: "# " title, "## " and
+"### " headings, "- " and "1. " lists, "> " quote, "_text_" italic line, paragraphs.
+"""
+
+import json
+import re
+from pathlib import Path
+
+from docx import Document
+from docx.document import Document as DocxDocument
+
+ROOT = Path(__file__).resolve().parent
+SOURCE = ROOT / "content" / "document.md"
+OUTLINE = json.loads((ROOT / "content" / "outline.json").read_text(encoding="utf-8"))
+NUMBERED = re.compile(r"^\d+\.\s+")
+
+
+def add_line(document: DocxDocument, line: str) -> None:
+    if line.startswith("### "):
+        document.add_heading(line[4:], level=2)
+    elif line.startswith("## "):
+        document.add_heading(line[3:], level=1)
+    elif line.startswith("# "):
+        document.add_heading(line[2:], level=0)
+    elif line.startswith("- "):
+        document.add_paragraph(line[2:], style="List Bullet")
+    elif NUMBERED.match(line):
+        document.add_paragraph(NUMBERED.sub("", line), style="List Number")
+    elif line.startswith("> "):
+        document.add_paragraph(line[2:], style="Quote")
+    elif line.startswith("_") and line.endswith("_") and len(line) > 2:
+        document.add_paragraph().add_run(line[1:-1]).italic = True
+    else:
+        document.add_paragraph(line)
+
+
+def build(source: Path = SOURCE, output: Path | None = None) -> Path:
+    output = output or ROOT / OUTLINE["output"]
+    document = Document()
+    document.core_properties.title = OUTLINE["title"]
+    for raw in source.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line:
+            add_line(document, line)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    document.save(str(output))
+    return output
+
+
+if __name__ == "__main__":
+    print(f"Document écrit : {build()}")

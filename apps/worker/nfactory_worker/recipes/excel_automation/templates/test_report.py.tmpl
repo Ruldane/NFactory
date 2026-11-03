@@ -1,0 +1,96 @@
+"""Check the workbook structure and recompute every KPI formula from the CSV data."""
+
+import re
+import zipfile
+from collections import defaultdict
+from pathlib import Path
+
+import pytest
+from openpyxl import load_workbook
+from openpyxl.workbook.workbook import Workbook
+
+from build_report import ACTIVITY_CSV, TARGETS_CSV, build, read_rows
+
+RANGE = r"'Données'!\$([A-Z])\$(\d+):\$([A-Z])\$(\d+)"
+CONDITIONAL = re.compile(rf"^=(SUMIF|AVERAGEIF)\({RANGE},A(\d+),{RANGE}\)$")
+
+
+@pytest.fixture(scope="module")
+def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return build(output=tmp_path_factory.mktemp("out") / "report.xlsx")
+
+
+@pytest.fixture(scope="module")
+def workbook(built: Path) -> Workbook:
+    return load_workbook(built)
+
+
+def column(workbook: Workbook, letter: str, first: int, last: int) -> list[object]:
+    sheet = workbook["Données"]
+    return [sheet[f"{letter}{row}"].value for row in range(first, last + 1)]
+
+
+def evaluate(workbook: Workbook, formula: str) -> float:
+    """Evaluate the SUMIF / AVERAGEIF formulas this report uses."""
+    match = CONDITIONAL.match(formula)
+    assert match, f"unexpected formula: {formula}"
+    func, key_col, key_first, _, key_last, criteria_row, val_col, val_first, _, val_last = (
+        match.groups()
+    )
+    team = workbook["KPI"][f"A{criteria_row}"].value
+    keys = column(workbook, key_col, int(key_first), int(key_last))
+    values = column(workbook, val_col, int(val_first), int(val_last))
+    picked = [float(v) for k, v in zip(keys, values, strict=True) if k == team]
+    assert picked, f"no data for {team}"
+    return sum(picked) if func == "SUMIF" else sum(picked) / len(picked)
+
+
+def expected_by_team() -> dict[str, tuple[float, float]]:
+    volumes: dict[str, list[float]] = defaultdict(list)
+    hours: dict[str, list[float]] = defaultdict(list)
+    for row in read_rows(ACTIVITY_CSV):
+        volumes[row["equipe"]].append(float(row["volume"]))
+        hours[row["equipe"]].append(float(row["duree_heures"]))
+    return {team: (sum(volumes[team]), sum(hours[team]) / len(hours[team])) for team in volumes}
+
+
+def test_sheets_are_in_reading_order(workbook: Workbook) -> None:
+    assert workbook.sheetnames == ["Synthèse", "Données", "KPI", "Graphique"]
+
+
+def test_every_csv_row_is_imported(workbook: Workbook) -> None:
+    assert workbook["Données"].max_row - 1 == len(read_rows(ACTIVITY_CSV))
+
+
+def test_kpi_formulas_match_the_source_data(workbook: Workbook) -> None:
+    kpi = workbook["KPI"]
+    expected = expected_by_team()
+    for row in range(2, 2 + len(read_rows(TARGETS_CSV))):
+        team = kpi[f"A{row}"].value
+        total, average = expected[team]
+        assert evaluate(workbook, kpi[f"B{row}"].value) == pytest.approx(total)
+        assert evaluate(workbook, kpi[f"C{row}"].value) == pytest.approx(average)
+
+
+def test_formulas_cover_every_data_row(workbook: Workbook) -> None:
+    last = workbook["Données"].max_row
+    assert f"$B${last}" in workbook["KPI"]["B2"].value
+
+
+def test_attainment_never_divides_by_zero(workbook: Workbook) -> None:
+    assert workbook["KPI"]["E2"].value == "=IF(D2=0,0,B2/D2)"
+
+
+def test_total_row_sums_the_teams(workbook: Workbook) -> None:
+    teams = len(read_rows(TARGETS_CSV))
+    total_row = 2 + teams
+    kpi = workbook["KPI"]
+    assert kpi[f"A{total_row}"].value == "Total"
+    assert kpi[f"B{total_row}"].value == f"=SUM(B2:B{total_row - 1})"
+
+
+def test_chart_is_embedded_and_no_macros(built: Path) -> None:
+    with zipfile.ZipFile(built) as archive:
+        names = archive.namelist()
+    assert any(name.startswith("xl/charts/") for name in names)
+    assert not any("vbaProject" in name for name in names)

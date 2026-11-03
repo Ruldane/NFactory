@@ -1,0 +1,13 @@
+"""Request and response contracts."""
+
+{{date_import}}from pydantic import BaseModel, ConfigDict, Field
+
+
+class {{class_name}}In(BaseModel):
+{{fields}}
+
+
+class {{class_name}}Out({{class_name}}In):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int

@@ -1,0 +1,56 @@
+# {{title}}
+
+{{summary}}
+
+Projet généré par NFactory (recette `webapp-react-fastapi` {{version}}).
+
+## Contenu
+
+| Dossier | Rôle |
+|---|---|
+| `backend/` | API FastAPI : CRUD `/{{plural}}` ({{label}}), export Excel `/{{plural}}/export.xlsx`, validation Pydantic, SQLite + migrations Alembic, tests pytest. Voir `backend/README.md`. |
+| `frontend/` | Application React (Vite) : liste, ajout et suppression, messages d'erreur en français, tests Vitest. |
+| `compose.yaml` | Lance le backend et le frontend (nginx) ensemble. |
+
+Le frontend appelle `/api/{{plural}}` ; le serveur de développement Vite et nginx retirent le
+préfixe `/api` avant de transmettre au backend.
+
+## Démarrer en développement
+
+```bash
+# Backend (terminal 1)
+cd backend
+python -m venv .venv && . .venv/bin/activate   # Windows : .venv\Scripts\activate
+pip install -e . httpx pytest ruff
+uvicorn app.main:app --reload
+
+# Frontend (terminal 2)
+cd frontend
+npm install
+npm run dev          # http://127.0.0.1:5173
+```
+
+## Démarrer avec Docker
+
+```bash
+docker compose up --build    # http://127.0.0.1:8080
+```
+
+Aucun secret ni compte administrateur n'est créé. Pour changer la base de données, copiez
+`.env.example` en `.env`.
+
+## Tests
+
+```bash
+cd backend && python -m pytest
+cd frontend && npm test
+```
+
+NFactory a exécuté l'analyse statique, la construction du frontend et les deux suites de tests
+dans son bac à sable, sans accès à Internet. Les images Docker ne sont pas construites par
+NFactory : vérifiez `docker compose up --build` sur votre poste.
+
+## Limites
+
+- Pas d'authentification : à ajouter avant toute exposition hors de votre poste.
+- Une seule ressource ({{label}}) ; ajoutez-en d'autres sur le même modèle.

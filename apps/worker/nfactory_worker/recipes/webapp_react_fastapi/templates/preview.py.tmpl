@@ -1,0 +1,37 @@
+"""Preview server: the built frontend and the API from one process.
+
+Run from the project root after `npm run build` in frontend/:  python tools/preview.py
+/api/... reaches the FastAPI backend without the prefix, as nginx does in production.
+NFactory uses it to show the app inside its sandbox (no Internet).
+"""
+
+import os
+import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+os.environ.setdefault("DATABASE_URL", "sqlite:////tmp/preview.db")
+
+import uvicorn  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+from app.main import app as api  # noqa: E402
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async with api.router.lifespan_context(api):  # runs the backend's migrations
+        yield
+
+
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+app.mount("/api", api)
+app.mount("/", StaticFiles(directory=ROOT / "frontend" / "dist", html=True))
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)  # noqa: S104 - inside the sandbox only

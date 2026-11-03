@@ -1,0 +1,217 @@
+# NFactory local development stack (spec §8.1).
+# Start: ./scripts/dev.ps1 (or: docker compose up --build)
+# Host ports are bound to 127.0.0.1 only and use uncommon numbers to avoid clashes.
+
+name: nfactory
+
+x-python-vars: &python-vars
+  DATABASE_URL: postgresql+psycopg://nfactory:nfactory_dev_only@postgres:5432/nfactory
+  REDIS_URL: redis://redis:6379/0
+  ARTIFACT_ROOT: /data/artifacts
+  WORKSPACE_ROOT: /data/workspaces
+  # Generated code runs in the sandbox, never in the worker itself. The API only reads
+  # it to report the setup honestly; it is not on the sandbox network.
+  NFACTORY_SANDBOX_URL: http://sandbox-supervisor:8800
+  # Inside a container 127.0.0.1 is the container itself: reach Ollama on the host.
+  OLLAMA_BASE_URL: ${OLLAMA_DOCKER_URL:-http://host.docker.internal:11434}
+  # The local bridge (task 4.1) runs on the host, bound to its 127.0.0.1 only; Docker
+  # Desktop delivers host.docker.internal traffic there. It answers paired requests only.
+  NFACTORY_BRIDGE_URL: http://host.docker.internal:8765
+
+x-python-env: &python-env
+  env_file:
+    - path: .env
+      required: false
+  environment: *python-vars
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg18
+    environment:
+      POSTGRES_USER: nfactory
+      # Local Compose only (spec §17.1); never reuse in a shared environment.
+      POSTGRES_PASSWORD: nfactory_dev_only
+      POSTGRES_DB: nfactory
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/<major>.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nfactory -d nfactory"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: applies migrations, then seeds demo data when NFACTORY_DEMO_MODE=true.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    <<: *python-env
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    command: ["python", "-m", "app.bootstrap"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    <<: *python-env
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - artifacts:/data/artifacts
+      # Read-only: the API only shows generated files.
+      - workspaces:/data/workspaces:ro
+    # sandbox: the API asks the supervisor to start or stop a preview (task 3.10).
+    networks: [default, sandbox]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    <<: *python-env
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [default, sandbox]
+    volumes:
+      - artifacts:/data/artifacts
+      - workspaces:/data/workspaces
+    healthcheck:
+      test: ["CMD", "arq", "--check", "nfactory_worker.main.WorkerSettings"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      sandbox-supervisor:
+        condition: service_healthy
+
+  # Sandbox v2 (ADR-0005, D8). Runs each recipe check in a throwaway container of the
+  # same image: no network, read-only, no capability, quotas, only that run's workspace.
+  # It is the only service holding the Docker socket (never api or worker); it accepts
+  # only validated, allow-listed commands from the worker, on a network with no Internet.
+  sandbox-supervisor:
+    image: nfactory-sandbox:latest
+    build:
+      context: .
+      dockerfile: apps/sandbox/Dockerfile
+    command: ["python", "-m", "nfactory_sandbox"]
+    working_dir: /srv
+    user: "10001:10001"
+    group_add: ["0"]  # group owning the Docker socket: no root user needed
+    environment:
+      # Only this value from .env: the supervisor never sees the other secrets.
+      NFACTORY_SANDBOX_TOKEN: ${NFACTORY_SANDBOX_TOKEN:?run scripts/ensure_secrets.py first}
+      NFACTORY_SANDBOX_IMAGE: nfactory-sandbox:latest
+      NFACTORY_WORKSPACES_VOLUME: nfactory_workspaces
+      # Previews (task 3.10) run on this internal network, reached only by the gateway.
+      NFACTORY_PREVIEW_NETWORK: nfactory_preview
+    networks: [sandbox]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - workspaces:/data/workspaces:ro  # only to check a workspace exists
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8800/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Preview gateway (task 3.10): the only way into a running preview, on its own origin
+  # (port 8090, never the dashboard's). No Docker socket, no secret: it reaches each
+  # preview by name on the internal preview network and strips cookies both ways.
+  preview-gateway:
+    image: nfactory-sandbox:latest
+    command: ["python", "-m", "nfactory_sandbox.preview_proxy"]
+    working_dir: /srv
+    user: "10001:10001"
+    environment:
+      NFACTORY_PREVIEW_FRAME_ANCESTORS: http://127.0.0.1:3000
+    networks: [preview, gateway]
+    ports:
+      - "127.0.0.1:8090:8090"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    depends_on:
+      sandbox-supervisor:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: apps/dashboard
+      args:
+        API_INTERNAL_URL: http://api:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Optional tracing UI: docker compose --profile telemetry up
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    profiles: ["telemetry"]
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4317:4317"
+
+networks:
+  default:
+  # internal: containers on it reach each other but nothing outside the host.
+  sandbox:
+    internal: true
+  # Previews only: no route out, no NFactory service on it except the gateway.
+  preview:
+    name: nfactory_preview  # the supervisor attaches previews to it by name
+    internal: true
+  # Lets the gateway publish its port; previews never join it.
+  gateway:
+
+volumes:
+  pgdata:
+  redisdata:
+  artifacts:
+  workspaces:
+    name: nfactory_workspaces  # the supervisor mounts subpaths of it by name

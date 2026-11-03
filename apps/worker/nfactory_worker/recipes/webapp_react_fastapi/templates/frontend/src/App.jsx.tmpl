@@ -1,0 +1,110 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { createClient, exportUrl } from "./api.js";
+import ENTITY from "./entity.json";
+import { display } from "./fields.js";
+import { ItemForm } from "./ItemForm.jsx";
+
+export function App({ fetcher = globalThis.fetch, entity = ENTITY }) {
+  const labels = useMemo(
+    () => Object.fromEntries(entity.fields.map((f) => [f.name, f.label])),
+    [entity],
+  );
+  const client = useMemo(() => createClient({ fetcher, labels }), [fetcher, labels]);
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setItems(await client.list(entity.plural));
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [client, entity.plural]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function create(item) {
+    try {
+      await client.create(entity.plural, item);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function remove(id) {
+    try {
+      await client.remove(entity.plural, id);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  return (
+    <main className="page">
+      <header>
+        <h1>{entity.title}</h1>
+        {entity.summary ? <p className="summary">{entity.summary}</p> : null}
+      </header>
+
+      {error ? (
+        <p role="alert" className="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <section aria-labelledby="list-title">
+        <div className="list-head">
+          <h2 id="list-title">{entity.label} : liste</h2>
+          <a className="export" href={exportUrl(entity.plural)} download>
+            Exporter en Excel
+          </a>
+        </div>
+        {items === null ? (
+          <p>Chargement…</p>
+        ) : items.length === 0 ? (
+          <p>Aucun élément pour l'instant.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                {entity.fields.map((f) => (
+                  <th key={f.name} scope="col">
+                    {f.label}
+                  </th>
+                ))}
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  {entity.fields.map((f) => (
+                    <td key={f.name}>{display(f, item[f.name])}</td>
+                  ))}
+                  <td>
+                    <button type="button" onClick={() => remove(item.id)} aria-label={`Supprimer ${item.id}`}>
+                      Supprimer
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section aria-labelledby="form-title">
+        <h2 id="form-title">Ajouter</h2>
+        <ItemForm entity={entity} onCreate={create} />
+      </section>
+    </main>
+  );
+}

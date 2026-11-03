@@ -1,0 +1,13 @@
+# Libraries the generated projects use, preinstalled: the sandbox has no Internet.
+# Versions follow uv.lock so checks behave the same as in NFactory's own tests.
+fastapi==0.162.0
+alembic==1.20.1
+mako==1.4.3
+sqlalchemy==2.1.6
+pydantic==2.14.2
+uvicorn==0.54.0
+httpx==0.28.1
+pytest==9.2.0
+ruff==0.17.3
+openpyxl==3.1.5
+python-docx==1.2.0

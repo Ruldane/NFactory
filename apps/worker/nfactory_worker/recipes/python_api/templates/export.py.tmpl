@@ -1,0 +1,53 @@
+"""Excel export of /{{plural}}: GET /{{plural}}/export.xlsx (one sheet, one row per item)."""
+
+from datetime import date
+from io import BytesIO
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, Response
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db import get_session
+from app.models import {{class_name}}
+
+router = APIRouter(prefix="/{{plural}}", tags=[{{tag}}])
+SessionDep = Annotated[Session, Depends(get_session)]
+SHEET = {{sheet}}
+FILENAME = "{{plural}}.xlsx"
+# (field, column label) in display order.
+COLUMNS = {{columns}}
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _cell(value: Any) -> Any:
+    if isinstance(value, bool):
+        return "Oui" if value else "Non"
+    return value
+
+
+@router.get("/export.xlsx", response_class=Response)
+def export_{{plural}}(session: SessionDep) -> Response:
+    workbook = Workbook()
+    sheet = workbook.worksheets[0]
+    sheet.title = SHEET
+    sheet.append(["N°", *(label for _, label in COLUMNS)])
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+    for item in session.scalars(select({{class_name}}).order_by({{class_name}}.id)):
+        sheet.append([item.id, *(_cell(getattr(item, field)) for field, _ in COLUMNS)])
+    for row in sheet.iter_rows(min_row=2):
+        for cell in row:
+            if isinstance(cell.value, date):
+                cell.number_format = "DD/MM/YYYY"
+    for column in sheet.columns:
+        width = max(len(str(c.value or "")) for c in column)
+        sheet.column_dimensions[column[0].column_letter].width = min(max(width + 2, 8), 60)
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    buffer = BytesIO()
+    workbook.save(buffer)
+    headers = {"Content-Disposition": f'attachment; filename="{FILENAME}"'}
+    return Response(content=buffer.getvalue(), media_type=XLSX, headers=headers)

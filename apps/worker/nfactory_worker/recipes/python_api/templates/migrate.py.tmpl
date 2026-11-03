@@ -1,0 +1,17 @@
+"""Apply the Alembic migrations. Also run when the API starts (app/main.py)."""
+
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
+
+from app.db import DATABASE_URL
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def upgrade(url: str = DATABASE_URL) -> None:
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "migrations"))
+    config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    command.upgrade(config, "head")

@@ -1,0 +1,320 @@
+# NFactory — Plan d'implémentation & statut
+
+> Source : `NFACTORY_MASTER_PLAN.md` v1.0 (spécification principale).
+> Créé le 2026-11-01. Ce fichier est mis à jour à chaque étape.
+
+**Statuts :** `TODO` · `READY` (interface prête, pas branchée) · `PARTIAL` · `BLOCKED` · `DONE` (critères §19 remplis, avec preuve).
+Une fonctionnalité simulée est marquée `DEMO`.
+
+---
+
+## 0. État initial (relevé le 2026-11-01)
+
+| Élément | Constat | Impact |
+|---|---|---|
+| Dépôt | Dossier non versionné, contient uniquement `NFACTORY_MASTER_PLAN.md` | `git init` + monorepo neuf |
+| Python hôte | 3.14.3, `uv` 0.12.22 | Python des conteneurs figé en **3.13** (compatibilité de l'écosystème) |
+| Node hôte | 24.11.1, npm 11.19.1, pas de pnpm | **npm workspaces** (une seule app JS) |
+| Docker | 29.8.2 + Compose v5.5.1 installés, **daemon arrêté** | Démarrer Docker Desktop avant la phase 0.4 |
+| git | 2.52 | OK |
+| `gh` | **absent** | Nécessaire en phase 4 seulement |
+| `claude` | 2.1.316 détecté | Phase 4 : handoff d'abord |
+| `codex` | codex-cli 0.155.1 détecté | Phase 4 : statut de connexion à vérifier via commande publique |
+| `make` | absent | Scripts `scripts/*.ps1` + `scripts/*.sh` (Makefile optionnel) |
+| PowerShell | Windows PowerShell 5.1 seulement (pas de `pwsh` 7) | Pester/PSScriptAnalyzer exécutés dans une image sandbox Linux avec `pwsh` |
+
+---
+
+## 1. Décisions techniques
+
+| # | Décision | Raison | À vérifier |
+|---|---|---|---|
+| D1 | Monorepo : `uv` workspace (Python) + npm workspace (dashboard) | Un lockfile par écosystème, rien de plus | — |
+| D2 | Paquet Python partagé `packages/core-py` (`nfactory_core`) : modèles SQLAlchemy, schémas Pydantic, machine d'états, contrats d'événements | L'API et le worker partagent les mêmes modèles ; évite la duplication | — |
+| D3 | Postgres image `pgvector/pgvector` (pg17), Redis 7 | Image officielle pgvector | Tag stable courant |
+| D4 | File de jobs : **ARQ** si encore maintenu, sinon **SAQ** ou **Taskiq** (Redis) | La spec autorise une alternative si ARQ pose problème | État de maintenance d'ARQ |
+| D5 | LangGraph + checkpointer Postgres officiel (`langgraph-checkpoint-postgres`) | Reprise sur checkpoint, interruptions pour approbations | API courante LangGraph |
+| D6 | **Mode démo = vrai code, faux LLM** : le `FakeProvider` renvoie des sorties structurées déterministes ; le Builder instancie les **golden path templates** paramétrés. Les tests générés sont réellement exécutés | Démo sans clé API sans mentir sur les tests | — |
+| D7 | Sandbox v1 : service `sandbox` sur un réseau Docker `internal: true` (pas d'Internet), utilisateur non-root, limites CPU/RAM, timeouts par commande, workspace par run. Pas de `docker.sock` dans l'API ni dans le worker | Respecte §8.3 dès la phase 1 | — |
+| D8 | Sandbox v2 (phase 3) : `sandbox-supervisor` dédié qui lance un conteneur éphémère par run (`--network none`, `--read-only`, `--cap-drop ALL`) | Meilleure isolation entre runs | — |
+| D9 | Dépendances des templates **pré-installées dans l'image sandbox** (pip, npm, Pester) | Tests possibles réseau coupé | — |
+| D10 | Secrets : variables d'environnement + colonne chiffrée (Fernet, clé `NFACTORY_SECRET_KEY` générée au bootstrap) ; la DB ne stocke qu'un `secret_ref` | Pas de trousseau OS dans les conteneurs | — |
+| D11 | Templates : manifest YAML versionné + rendu Jinja2 (ou `copier`) | Golden paths paramétrables | — |
+| D12 | Front : Next.js (App Router) + TS + Tailwind + shadcn/ui + TanStack Query + SSE (`EventSource`) | Conforme §4.2 | Versions stables courantes |
+| D13 | Bridge local (phase 4) : processus hôte sur `127.0.0.1:48321` avec jeton d'appairage ; appelé **par le navigateur de l'hôte**, pas par les conteneurs | Les conteneurs ne voient pas le loopback de l'hôte (§17.1) | Faisabilité CORS/appairage |
+| D14 | Claude Code : **handoff** par défaut ; runtime piloté derrière le flag `CLAUDE_CODE_RUNTIME_ENABLED=false` | §6.5 : conformité à vérifier avant activation | Legal & compliance Anthropic |
+| D15 | Codex : `codex exec` / app-server via le bridge, statut obtenu par commande publique uniquement | §6.4 | Docs Codex SDK/app-server |
+
+Chaque décision importante a son ADR dans `docs/decisions/`.
+
+---
+
+## 2. Stratégie
+
+1. **Tranche verticale d'abord** : phases 0 et 1 jusqu'au parcours « je décris une API ou un Excel → fichiers → tests réels → ZIP → trace dans le dashboard ».
+2. Ensuite les providers (phase 2) et la RAG (phase 3), avant tout écran décoratif.
+3. Aucune phase ne démarre si la précédente est cassée : `scripts/check.ps1` (lint + tests + smoke) doit passer.
+4. Les interfaces P1/P2 peuvent exister en `READY`, mais restent marquées comme telles dans l'UI et ici.
+
+---
+
+## 3. Phases, tâches et critères d'acceptation
+
+### PHASE 0 — Foundation & bootstrap (P0) · taille L
+
+| ID | Tâche | Critère d'acceptation | Statut |
+|---|---|---|---|
+| 0.1 | `git init`, `.gitignore`, `.gitattributes` (fins de ligne LF), `.editorconfig`, README squelette | `git status` propre après premier commit | PARTIAL — fichiers en place, dépôt initialisé ; **aucun commit** (en attente de ton accord) |
+| 0.2 | Workspace `uv` : `apps/api`, `apps/worker`, `apps/local-bridge` (vide), `packages/core-py` ; ruff, mypy, pytest | `uv run ruff check .` et `uv run pytest` passent | DONE — `uv run pytest` : 100 tests |
+| 0.3 | Dashboard Next.js + Tailwind + shadcn/ui + palette §9.1 ; ESLint, Vitest | `npm run lint && npm test` passent | DONE — Next 16.4 / React 19.3 / Tailwind 4 ; 21 tests Vitest |
+| 0.4 | `compose.yaml` : postgres, redis, api, worker, dashboard, migrate (one-shot) ; healthchecks, volumes nommés ; profil `telemetry` (Jaeger) | `docker compose up --build` → tous les services `healthy` | DONE — 6 services `healthy` / `exited 0` (migrate) |
+| 0.5 | Modèles SQLAlchemy de **toutes** les tables §10.1 + migration Alembic initiale (`CREATE EXTENSION vector`) | `alembic upgrade head` sur base vide puis `downgrade base` OK | DONE — `test_migrations.py` (upgrade, downgrade, idempotence) ; 19 tables |
+| 0.6 | API : `/health`, `/ready`, `/dashboard/summary`, CRUD `/projects`, format d'erreur structuré, pagination | Tests d'intégration contre Postgres réel | DONE — `apps/api/tests/api/*` contre PostgreSQL réel |
+| 0.7 | Seed démo idempotent : utilisateur local, workspace, projets/runs/événements marqués `demo=true` | 2 exécutions → même nombre de lignes | DONE — seed dans `app/demo/` (lancé par le service `migrate`), `test_demo_seed.py` |
+| 0.8 | Dashboard : sidenav, **Overview** (KPIs depuis l'API, badge `Demo data`), liste **Projects** | Données affichées = données en base | DONE — vérifié en navigateur ; convoyeur d'étapes depuis les vraies données |
+| 0.9 | Protocoles `ModelProvider` / `CodingAgentRuntime` (§6.3) + `FakeProvider` déterministe | Tests de contrat sur le FakeProvider | DONE — `test_contract.py`, `test_fake_provider.py` |
+| 0.10 | `scripts/bootstrap.ps1` / `.sh` (crée `.env`, génère les secrets sans les afficher), `dev.*`, `check.*`, `doctor.py`, `smoke_test.py` | Checkout propre → `bootstrap` → `dev` → dashboard en ligne | DONE — `bootstrap.ps1` exécuté de bout en bout (sans `.env` → `.env` créé, stack lancée, smoke test vert) |
+| 0.11 | CI GitHub Actions (lint + tests Python et dashboard) | Workflow valide (`actionlint`) | READY — workflow écrit, versions d'actions vérifiées ; jamais exécuté (pas de dépôt distant) |
+| 0.12 | `docs/architecture.md`, ADR 0001–0005 (D1, D2, D4, D6, D7) | Présents et cohérents avec le code | DONE — `docs/architecture.md`, ADR 0001–0005 |
+
+**Validation phase 0 :** `scripts/check.ps1` vert ; `curl localhost:8000/api/v1/health` → 200 ; le dashboard liste les projets de démo.
+
+**Résultat (2026-11-01) : validée**, sauf le premier commit (0.1) et l'exécution de la CI (0.11).
+
+### PHASE 1 — Project Builder end-to-end (P0) · taille XL
+
+| ID | Tâche | Critère d'acceptation | Statut |
+|---|---|---|---|
+| 1.1 | Machine d'états des runs (§10.2), module pur | Toutes les transitions permises et interdites testées | DONE — fait en avance (`test_states.py`, 55 cas) |
+| 1.2 | Événements : table `events` + pub/sub Redis + SSE `/runs/{id}/events` avec `Last-Event-ID` | Reconnexion SSE sans perte ni doublon (test) | DONE — `test_event_stream_replays_history_and_resumes_after_last_event_id` ; le worker publie sur `run_channel(run_id)` après chaque événement et le flux SSE s'y abonne (`app/wakeups.py`) : un nouvel événement part dès le signal (`test_signalled_event_is_sent_without_waiting_for_the_poll`, `test_redis_signal_wakes_the_stream_at_once`). La table reste la source de vérité : revérification de sécurité toutes les 2 s, et retour à une vérification toutes les 0,5 s si Redis tombe (`test_dead_redis_falls_back_to_polling`) |
+| 1.3 | Worker + file `factory-runs` : idempotency key, timeout, `MAX_AGENT_STEPS`, budget, annulation | Un run annulé passe à `CANCELLED`, jamais `RUNNING` bloqué | DONE — job ARQ `run_factory` (`_job_id` = id du run), en-tête `Idempotency-Key`, timeout du job, annulation avant et pendant le run (`test_cancelling_a_queued_run…`, `test_run_cancelled_by_the_user_mid_way_stops`), file indisponible → run `FAILED`. Limites figées dans `runs.budget` au lancement (`max_llm_calls`, `max_agent_steps`, `max_repair_attempts`) et appliquées par le worker : tout appel d'agent passe par `call_agent`, qui refuse l'appel au-delà du budget (`test_run_stops_when_its_llm_budget_is_spent`, `test_run_budget_and_trace_id_come_from_the_stored_run`) ; `MAX_AGENT_STEPS` borne le graphe (`test_run_stops_at_the_step_limit`) |
+| 1.4 | Graphe LangGraph v1 : validate → requirements → plan → architect → workspace → build → static checks → tests → (debug ≤ 3) → review → docs → package ; checkpointer Postgres | Sorties d'agent validées Pydantic, avec version du prompt, provider, trace_id | DONE — graphe en 9 étapes + boucle de réparation bornée (`apps/worker/tests/pipeline`), sorties Pydantic avec version du prompt, provider, modèle et `trace_id` du run (créé à son lancement, `test_every_agent_output_carries_the_run_trace_id`). L'export des traces vers Jaeger (OpenTelemetry) relève de la phase 5 |
+| 1.5 | Moteur de templates + manifests ; templates **`python-api`** et **`excel-automation`** avec leurs propres tests | Le projet généré passe ses tests hors NFactory | DONE — catalogue de recettes (15 types, code et non-code) ; recettes `python-api` (v1.1 : FastAPI, SQLAlchemy, **Alembic**, pytest, healthcheck, OpenAPI, exemples curl), `excel-automation` et `document` (.docx), chacune lance pour de vrai ses ruff/build/pytest (`apps/worker/tests/recipes`, y compris injection de texte hostile). Le projet généré prouve que ses migrations construisent exactement le schéma des modèles (`test_migrations_match_the_models`, comparaison Alembic) ; ce test a trouvé et fait corriger un écart de type (`float` → `Double`) |
+| 1.6 | Sandbox v1 (D7) + runner déterministe : ruff/pytest → résultat JSON normalisé | Réseau coupé vérifié ; timeout respecté ; chemin `../` refusé | DONE — service `sandbox` (réseau Docker `internal`, uid 10001, rootfs en lecture seule, `cap_drop ALL`, 1 CPU / 1 Go / 256 PID, jeton) ; `apps/sandbox/tests` (11) + `SandboxRunner` (4). Vérifié dans la stack : `urlopen('https://pypi.org')` → échec de résolution DNS ; 3 commandes du run Excel exécutées par le sandbox |
+| 1.7 | Artefacts : stockage local, checksum, ZIP, `/artifacts/{id}/download` avec ACL | Le ZIP téléchargé se reconstruit et ses tests passent | DONE — ZIP déterministe, sha256, `test_zip_is_reproducible_and_its_tests_pass_when_unzipped`, téléchargement limité à l'espace de travail (`test_unknown_run_and_artifact_are_not_found`) |
+| 1.8 | Dashboard : **New Project** (prompt + wizard), **Project** (arbre de fichiers, onglets Tests/Docs/Artefacts), **timeline live** SSE, boutons Run/Cancel/Download | Parcours complet à la souris | DONE — pages `/new`, `/runs/[id]` (chaîne d'étapes, journal SSE, onglets Livrables/Tests/Fichiers/Explication, Annuler), **`/live`** Usine en direct (graphe des agents avec état, durée, tentatives et boucle de correction ; journal filtrable Tout/Agents/Vérifications/Étapes/Erreurs avec la trace) et **`/settings`** Réglages (environnement réel, limites des runs modifiables, figées dans chaque nouveau run ; repli et rétention affichés grisés avec leur phase). Tests : `components/live`, `components/settings`, `lib/live.test.ts`, `apps/api/tests/api/test_settings.py` ; parcours fait à la souris dans le navigateur |
+| 1.9 | Reprise : redémarrage du worker pendant un run → reprise sur checkpoint | Test de durabilité automatisé | DONE — `test_crashed_run_resumes_at_the_interrupted_step` (Postgres réel) et bail de run dans Redis (`jobs/recovery.py`, `test_recovery.py`, 4 tests) : un run `RUNNING` sans bail vivant est libéré au démarrage du worker et chaque minute, au lieu d'attendre le verrou ARQ (~30 min). Preuve réelle : `docker compose kill worker` (SIGKILL) pendant l'étape Vérifications, puis redémarrage → run `COMPLETED` 43 s après le kill, étapes déjà faites non rejouées |
+| 1.10 | Docs auto (README, procédure) + **Explain mode** (résumé simple de ce qui a été généré et de ce qu'il faut vérifier) | Présents dans chaque ZIP | DONE — README par recette, `EXPLICATION.md` écrit à l'étape docs et inclus dans le ZIP (`test_end_to_end.py`) ; l'onglet Explication affiche des sections mises en forme à partir de la sortie structurée de l'agent (`run-view.test.tsx`) |
+
+**Validation phase 1 :** en mode démo, « API de gestion d'inventaire » → `COMPLETED`, pytest vert, ZIP reproductible ; « Excel KPI hebdo » → `.xlsx` multi-onglets avec formules vérifiées par openpyxl.
+
+**Résultat (2026-11-01) : validée en mode démo (`DEMO`)**, toutes les tâches `DONE`. Les agents répondent avec le modèle démo déterministe : sans mode démo ni fournisseur, l'API refuse le run (`no_model_configured`) au lieu d'appeler un service externe. Les vrais fournisseurs arrivent en phase 2.
+
+**Types de projet (catalogue `nfactory_core.catalog`) :**
+
+| Phase | Code | Non-code |
+|---|---|---|
+| 1 (disponibles) | API Python | Classeur Excel, Document Word |
+| 3 | Application web, Script PowerShell | — |
+| 4 | Repo existant | — |
+| 6 | CLI, pipeline de données, connecteur d'API, workflow GitHub Actions, module Terraform, suite de tests | Site de documentation, rapport planifié, présentation |
+
+### PHASE 2 — Multi-provider réel (P0/P1) · taille L
+
+| ID | Tâche | Critère d'acceptation | Statut |
+|---|---|---|---|
+| 2.1 | Erreurs normalisées (401, 429, timeout, quota, unsupported), usage/tokens, coût si prix connu | Tests unitaires par cas | DONE — `ProviderError` à 10 types normalisés (`auth`, `quota`, `rate_limit`, `timeout`, `unavailable`, `bad_request`, `not_found`, `unsupported`, `invalid_response`, `blocked`), classement propre à chaque fournisseur (codes Z.ai, MiniMax, Qwen, Kimi, 429 quota/débit), message français, détail masqué ; `Usage` (dont jetons en cache et de raisonnement), coût = prix du catalogue, `None` sans prix. `providers/test_errors.py` (35 cas + réessai, `Retry-After`, masquage de clé), `test_retry_and_cost.py` |
+| 2.2 | Suite de tests de contrat commune (HTTP mocké avec `respx`) : stream, tool calls, JSON | Exécutée sur chaque adaptateur | DONE — `providers/test_contract.py` : 13 tests de contrat × 9 adaptateurs (texte, JSON, appels d'outils, stream + usage, découverte, capacités, erreurs, en-têtes d'auth) contre des serveurs `respx` dans le dialecte de chaque fournisseur ; contrôle par mutation : la suite casse quand on altère un adaptateur |
+| 2.3 | `openai_api`, `anthropic_api` (docs officielles vérifiées à l'implémentation) | Contrat vert ; test live seulement si clé fournie | DONE — adaptateurs OpenAI et Anthropic (`anthropic-version: 2026-10-21`, sortie JSON structurée seulement si `/v1/models` l'annonce, pas de `temperature`), vérifiés sur les docs officielles (`docs/research/providers.md`). Test live facultatif `test_live.py` (marqueur `live`, `NFACTORY_LIVE_TESTS=1` + clé) : **non lancé, aucune clé fournie** |
+| 2.4 | `deepseek_api`, `zai_glm_api`, `moonshot_kimi_api` (base OpenAI-compatible + surcharges) | Contrat vert | DONE — DeepSeek, Z.ai (4 régions dont Coding Plan), Kimi (international/Chine) : profils OpenAI-compatibles, contrat vert |
+| 2.5 | `qwen_api` (région/workspace configurables), `minimax_api`, `custom_openai_compatible` (garde SSRF), `ollama_local` | Contrat vert ; test SSRF négatif | DONE — Qwen (6 régions à espace dédié avec identifiant validé + 2 domaines historiques), MiniMax (erreurs en HTTP 200 reconnues), endpoint personnalisé et Ollama ; garde SSRF refaite avant chaque requête, sans suivre les redirections (`test_ssrf.py`, `test_custom_endpoint_on_a_private_network_is_refused`) |
+| 2.6 | Stockage des secrets (D10) ; aucun secret dans logs, events, prompts | Test de fuite (grep des logs après run) | DONE — table `secrets` chiffrée Fernet (clé dérivée de `NFACTORY_SECRET_KEY` par HKDF), référence `db:`/`env:` (`test_secrets.py`) ; l'API ne renvoie jamais la clé (`test_a_saved_key_is_encrypted_never_returned…`). **Test de fuite** : après un vrai run routé, aucune table de la base ne contient la clé en clair (`test_no_table_holds_the_key_after_a_run`) ni aucun événement (`test_a_routed_run_uses_its_provider…`) |
+| 2.7 | Catalogue de modèles : découverte quand disponible, sinon catalogue administrable ; aucun nom figé en dur | Test avec catalogue vide → UI explicite | DONE — découverte enregistrée (`source=discovered`) au test de connexion ; ajout manuel avec prix ; fournisseurs sans découverte (Z.ai, Qwen) → statut « Modèle requis » puis test sur le modèle du catalogue (`test_provider_without_discovery_needs_a_catalog_model_then_probes_it`) ; catalogue vide expliqué dans l'UI ; aucun nom de modèle dans le code |
+| 2.8 | Routeur par rôle, fallback `ask_user`, mode `LOCAL_ONLY`, arrêt sur budget | Pas de fallback silencieux (test) | DONE — routage par rôle figé dans `runs.provider_config` au lancement (`test_routing.py` core + API) ; refus `provider_not_ready`, `routing_incomplete`, `local_only_violation` ; réessai des seules erreurs passagères ; **aucun repli silencieux** (`test_a_refused_key_fails_the_run_without_trying_another_engine`) ; `ask_user` → `APPROVAL_PENDING` + approbation, reprise à l'étape en échec sans rejouer les précédentes (`test_paused_run_resumes_at_the_failed_step_on_the_new_engine`, `test_run_approvals.py`) ; coût mesuré sur un vrai run via l'adaptateur OpenAI (`test_a_routed_run_uses_its_provider_and_records_a_measured_cost`) |
+| 2.9 | UI **AI Providers** : cartes aux statuts honnêtes, bouton « Tester la connexion », édition du routage | Aucun statut `Connected` sans test réussi | DONE — page **Moteurs IA** (`/providers`) : cartes à statut glyphe + libellé, clé en écriture seule, région / espace / URL, « Tester la connexion », catalogue, éditeur de routage ; bandeau de décision sur la page du run ; agents de code grisés « Phase 4 ». Tests `components/providers`, `approval-banner.test.tsx`. Vérifié dans le navigateur sur la stack Docker : Ollama enregistré → « À tester », test → « Injoignable » (Ollama absent de ce poste), jamais « Connecté » sans test réussi |
+
+**Validation phase 2 :** tous les adaptateurs passent les tests de contrat ; aucun secret dans les logs.
+
+**Résultat (2026-11-02) : validée**, toutes les tâches `DONE`. Les appels réels aux fournisseurs sont prouvés contre des serveurs simulés au format officiel ; aucun test live n'a été lancé faute de clé (facultatif, §5).
+
+### PHASE 3 — Agent factory avancée + RAG (P0/P1) · taille XL
+
+| ID | Tâche | Critère d'acceptation | Statut |
+|---|---|---|---|
+| 3.1 | Dix rôles (§5) avec schémas ; A4, A7 et les décisions de A10 en code déterministe ; agents conditionnels | Un run Excel n'appelle pas l'Architect web | DONE — `nfactory_core.roster` : les dix rôles A1–A10 (+ documentaliste), chacun « modèle » ou « code » (A4 orchestrateur, A5/A6 recettes, A7 testeur, A10 livraison en code) ; `plan_steps(type)` décide seul des étapes actives : l'architecte ne tourne que pour webapp/api/feature, les autres étapes sont créées `SKIPPED` avec leur raison (événement `step.skipped`, affiché « A6 · Automaticien … non exécuté » dans la timeline). Tests `test_roster.py` (7, dont parité avec `lib/agents.ts`), `test_conditional_agents.py` (Excel sans architecte, API et webapp avec), `step-timeline.test.tsx` ; sur la stack Docker, le run PowerShell du smoke test a `architect` SKIPPED |
+| 3.2 | RAG ingestion : upload md/pdf/docx/txt/code, extraction, dédup par hash, chunking (sections / symboles) | Ré-upload identique = aucun nouveau chunk | DONE — `nfactory_core.knowledge` (ADR-0007) : extraction md/txt/code/PDF (pypdf)/Word (python-docx) avec plafonds (10 Mo, 500 pages, 50 Mo décompressés) ; découpage par sections, symboles Python (`ast`) et blocs, chaque passage garde ses lignes ; dédup sha256 par portée : ré-upload identique → `duplicate`, aucun chunk (`test_store.py`), même chemin modifié → nouvelle révision. Tests `test_extract.py` (13), `test_chunking.py` (6) |
+| 3.3 | Embeddings choisis indépendamment du modèle de génération ; option locale ; index versionné par dimension | Changement de modèle → ré-indexation, pas de mélange | DONE — moteur choisi par espace (`/knowledge/settings`), indépendant du routage : empreinte locale par défaut, OpenAI / endpoint compatible / Ollama (API vérifiées, `docs/research/providers.md`) ; chaque chunk porte `embedding_model` + dimension, la recherche ne compare que la clé active ; changement de moteur → ré-indexation par le job `index_knowledge`, sans repli silencieux (`test_engine.py`, `test_indexing.py`, `test_embeddings.py`) |
+| 3.4 | Recherche hybride (full-text + vecteur, fusion RRF), ACL appliquées **avant** la recherche, citations | Test négatif : aucun chunk d'un autre projet | DONE — ACL dans la requête SQL avant tout classement, plein texte + cosinus fusionnés par RRF (k=60), citations chemin + lignes + section ; **test négatif** `test_a_project_never_sees_another_projects_documents` (vérifié par mutation) ; un vrai run ne cite que les documents de son projet (`test_run_knowledge.py`) |
+| 3.5 | Protection prompt injection : contenu RAG traité comme non fiable | Test : un README malveillant ne change aucune permission | DONE — passages transmis à l'analyste comme données JSON (`payload.sources`), jamais dans les consignes ; prompt v2 avec règle explicite ; `test_a_malicious_readme_changes_no_permission` : budget, moteur, recette et commandes inchangés |
+| 3.6 | UI **Knowledge Hub** : import, statut d'indexation, recherche avec citations | Citation cliquable vers source et ligne | DONE — page **Base de connaissances** (`/knowledge`) : import avec portée, liste à statut glyphe + libellé, recherche avec citations, choix du moteur et erreur d'indexation ; visionneuse `/knowledge/documents/[id]?lignes=a-b#La` ; onglet **Sources** du run. Tests `components/knowledge`, `lib/knowledge.test.ts`, `run-view.test.tsx`. Vérifié dans le navigateur sur la stack Docker : recherche → clic sur la citation → lignes 1 à 3 surlignées ; smoke test 18/18 dont un run Excel qui cite le document |
+| 3.7 | Templates **`webapp-react-fastapi`** et **`powershell-automation`** (PSScriptAnalyzer + Pester dans la sandbox) | Tests du projet généré verts | DONE — image sandbox avec pwsh 7.6, Node 24 (empreinte sha256), Pester 6, PSScriptAnalyzer et une boîte à outils web figée (`apps/sandbox/web-deps`, liée hors ligne par `tools/link-frontend-deps.mjs`, versions identiques testées). **powershell-automation** : script `-WhatIf`/journal/contrôle par type, BOM, 6 tests Pester + 3 tests de sécurité sur l'arbre syntaxique (mutation : un `Invoke-Command` injecté fait échouer le test), texte du brief inerte (`ps_literal`/`ps_comment`). **webapp-react-fastapi** : backend python-api sous `backend/`, frontend React (Vite) dont le JS est fixe et le brief n'est que des données (`entity.json`, titre échappé), tests Vitest (liste, ajout, suppression, erreurs réseau et 422), Dockerfiles, Compose sur 127.0.0.1, `.env.example` sans secret. Les rapports JUnit de plusieurs contrôles s'additionnent (`test_reports_of_several_test_checks_add_up`). `Workspace.files()` ne traverse plus aucun lien et ignore `node_modules` (`test_files_never_follows_a_link`). Tests `test_powershell_recipe.py` (5), `test_webapp_recipe.py` (5), exécutés dans l'image sandbox confinée (réseau coupé, lecture seule). Stack Docker : smoke test 22/22, run webapp 20/20 tests (pytest + Vitest), run PowerShell 9/9 |
+| 3.8 | Sandbox v2 (D8) : conteneur éphémère par run, quotas | Tests sandbox §19.1 (CPU, réseau, fichiers) | DONE — service `sandbox-supervisor` (`apps/sandbox/nfactory_sandbox`, ADR-0005 v2) : un conteneur jetable **par commande** à spécification figée (réseau `none`, lecture seule, `CapDrop ALL`, `no-new-privileges`, uid 10001, 1 CPU, 1 Go sans swap, 256 processus, `/tmp` 256 Mo, journaux 2 Mo), seul le sous-dossier du run monté (volume subpath + `NoCopy`), conteneur toujours supprimé, restes nettoyés au démarrage, 4 commandes en parallèle au plus (503 au-delà), 502 si Docker échoue. Seul service à monter `docker.sock` (vérifié par `docker inspect` : ni api ni worker). Tests §19.1 contre un vrai Docker via le `SandboxRunner` du worker (`test_isolation.py`, 8) : réseau bloqué (IP et hôte), workspace d'un autre run invisible, écriture refusée hors workspace et `/tmp`, délai dépassé → tué, quotas cgroup CPU / mémoire / processus, mémoire dépassée → 137 + message, uid 10001 sans capacité ni secret, aucun conteneur restant ; tests unitaires `test_containers.py` (10), `test_engine.py` (9), `test_server.py` (14). Stack Docker : smoke test 22/22 à travers le superviseur (11 commandes, 0 conteneur restant). Limite : pas de quota disque sur le workspace |
+| 3.9 | Boucle de réparation tracée + Reviewer + Security (scan de secrets, analyse statique) | Échec injecté → réparation visible dans la timeline | DONE — **réparation tracée** : chaque correctif appliqué produit `repair.applied` (tentative, échec, diagnostic, fichiers) et une entrée `repair_log` affichée sous l'étape concernée (liste « Corrections automatiques » de la timeline), conservée aussi quand le run abandonne (`repair.abandoned` + sortie de l'étape en échec). **Sécurité (A10, code)** : `nfactory_worker.security.scan_files`, première vérification de l'étape checks (« Recherche de secrets ») : clés privées, AWS, GitHub, clés d'API, secrets écrits en clair, identifiants dans une URL, `.env` rempli ; un constat donne fichier, ligne et règle, **jamais la valeur**, et passe par la boucle de réparation ; aucune recette ne déclenche de faux positif. **Analyse statique** : règles de sécurité ruff (`S`, bandit) dans tous les projets Python générés (mutation : un `shell=True` injecté → S602). **Relecteur (A9)** : reçoit résumé du scan, historique des corrections et fichiers (prompt v2), signale les points à relire sans décider du résultat. Tests : `test_secret_scan.py` (25), `test_security_scan.py` (secret planté → trouvé → corrigé ; non corrigé → run en échec sans la valeur), `test_repair.py` (trace + historique après abandon), `test_static_security.py` (4), `repair-list` / `step-timeline.test.tsx`, `run-events.test.ts`. Navigateur sur la stack Docker : le run démo KPI (DEMO) affiche ses 3 corrections sous l'étape Tests, sans erreur console ; les 3 runs du smoke test commencent par « Recherche de secrets » réussie |
+| 3.10 | **Preview** : l'app générée tourne dans la sandbox, accessible via le dashboard | Écran React réel visible | DONE — la recette web déclare son aperçu (`RenderedProject.preview` : `python tools/preview.py`, frontend construit + API FastAPI dans un seul processus, chemins relatifs). Le superviseur lance un conteneur d'aperçu confiné (`nfactory_sandbox.previews`) : réseau interne `nfactory_preview` sans Internet ni service NFactory, workspace en lecture seule, aucun port publié, 2 aperçus max, arrêt après 15 min. `preview-gateway` (sans socket ni secret, 127.0.0.1:8090) est la seule entrée : cookies et en-têtes d'authentification retirés, `frame-ancestors` limité au dashboard. API : `POST/GET/DELETE /api/v1/runs/{id}/preview` ; la commande est relue dans le run, jamais prise dans la requête. Dashboard : onglet « Aperçu » (runs terminés avec aperçu). Tests : `test_previews.py` (8), `test_preview_proxy.py` (10), `test_preview_routes.py` (7), `test_engine.py` (+4), `test_previews.py` API (9), `test_webapp_recipe.py` (aperçu servi localement : page + API), `preview-panel.test.tsx` (4), `run-view.test.tsx` (+2). **Docker réel** : `test_isolation.py` (9 dont l'aperçu : pas d'Internet, écriture refusée, autres runs invisibles). **Stack** : run web du smoke test → aperçu démarré, page et assets servis, API générée utilisée via la passerelle ; depuis le conteneur, 1.1.1.1, pypi.org, api, postgres, redis, superviseur et hôte injoignables ; navigateur : l'app React s'affiche dans l'onglet Aperçu, un élément ajouté dans l'iframe apparaît dans sa liste, « Arrêter » supprime le conteneur (passerelle → 502) |
+| 3.11 | Runs enfants : nouvelle demande sur un projet existant → diff + nouvelle validation | Scénario E (§3.5) reproductible | DONE — **API** : `parent_run_id` dans `POST /projects/{id}/runs` ; le parent doit être un run livré (`COMPLETED`) du même projet (sinon 409 `parent_not_completed` ou 404). **Worker** : le run enfant part du brief livré (`ParentRun`, relu dans l'étape requirements du parent) ; l'agent Besoins reçoit `previous_brief` (prompt v3) et n'applique que le changement ; la table et la route de l'entité sont conservées quoi que réponde le modèle ; le mode démo ajoute les champs nommés (« un filtre par département » → `departement`) et liste en question ouverte ce qu'il ne sait pas faire (« export PDF »). La recette reconstruit, **les vérifications et les tests tournent à nouveau** ; l'étape review compare les deux workspaces (`nfactory_worker.changes` : ajoutés, modifiés, supprimés, diff unifié, sorties reconstruites ignorées, binaires sans contenu, plafond 200 000 caractères), émet `changes.computed` et transmet le diff au Relecteur (prompt v3 : signaler tout changement hors demande) ; l'étape package stocke `modifications.diff` (text/x-diff). **Dashboard** : formulaire « Évolution demandée » sur un run terminé, lien « Évolution du run … », onglet « Modifications » (fichiers + diff coloré). Tests : `test_child_runs.py` API (7) et pipeline (4), `test_changes.py` (5), `test_demo_brain.py` (+3), `test_process_run.py` (+1, Postgres), `change-request` (3), `changes-panel` (3), `run-view` (+3), `run-events` (+1). **Stack** : smoke test, évolution « Ajoute le champ éditeur » du run web → terminée, retestée, 8 fichiers modifiés ; navigateur : diff affiché, l'aperçu du run enfant montre le nouveau champ « Éditeur ». Limite : le projet est régénéré depuis le brief, donc (1) les correctifs appliqués par la boucle de réparation du parent ne sont pas repris tels quels, (2) la migration initiale est réécrite au lieu d'en ajouter une : une base déjà déployée avec la version parente doit être migrée à la main |
+
+**Validation phase 3 :** démo « IT licence manager » (§3.1) : preview React + API, export Excel, tests, sources RAG citées. — **DONE** (2026-11-02). Rejouable par `uv run python scripts/smoke_test.py` (section « Démo licences ») : la politique `politique-licences.md` est importée dans la base de connaissances, puis un run web reçoit la demande du §3.1 (« Crée une application interne de suivi des licences : dashboard React, API Python, PostgreSQL, export Excel, alertes d'expiration… »). Résultat : run `COMPLETED` ; entité Licence (Logiciel, Éditeur, Postes, Expiration) ; tests pytest + Vitest du projet généré verts dans le sandbox ; la politique est citée (S1, lien vers les lignes 1 à 3) ; l'aperçu sert l'app React et son API ; **l'export Excel** (`GET /licences/export.xlsx`, openpyxl, en-têtes en gras, dates au format JJ/MM/AAAA, filtre, volet figé) se télécharge par la passerelle et se relit avec openpyxl ; réparations : toutes tracées (0 sur ce run) ; l'évolution « Ajoute le champ responsable » repasse les tests et produit son diff. Vérifié aussi au navigateur (onglets Sources et Aperçu, lien « Exporter en Excel »). Ajouts pour cette démo : option `excel_export` de la recette `python-api` (activée par la recette web, tests générés `tests/test_export.py`, la route d'export passe avant `/{id}`) ; en mode démo, un run web choisit aussi l'entité du domaine (avant : entité générique « Élément »). Limites : (1) les **alertes d'expiration** ne sont pas générées (aucune recette d'automatisation planifiée ; le mode démo ne le signale pas encore en question ouverte) ; (2) l'app générée stocke ses données en **SQLite** (volume `data`), pas en PostgreSQL ; (3) la PR demandée au §3.1 relève de la phase 4 ; (4) démo jouée avec le modèle démo (`FakeProvider`), pas avec un vrai moteur.
+
+### PHASE 4 — Coding agents locaux + GitHub (P1) · taille L
+
+| ID | Tâche | Critère d'acceptation | Statut |
+|---|---|---|---|
+| 4.1 | `apps/local-bridge` (D13) : écoute sur loopback, appairage, aucune commande shell brute exposée | Test : refus sans jeton ; pas d'écoute sur 0.0.0.0 | DONE — `apps/local-bridge` (`nfactory_bridge`, bibliothèque standard, ADR-0008), lancé hors Docker par `scripts/bridge.ps1` / `bridge.sh`. **Écoute** : `make_server` refuse toute adresse qui n'est pas une loopback IPv4 (`0.0.0.0`, `::`, IP du LAN, nom d'hôte) ; vérifié en réel : `127.0.0.1:8765 LISTENING` seulement. **Appairage** : code à usage unique affiché dans le terminal (10 min, brûlé après 5 erreurs) échangé contre un jeton ; le pont ne garde que son SHA-256 (profil utilisateur), l'API le chiffre dans le `SecretStore` (connexion `local_bridge`) et ne le renvoie jamais. **Refus** : sans jeton (401, seul `/health` répond), navigateur (`Origin` → 403), hôte inconnu (421, rebinding DNS), corps > 8 Ko (413), aucune route ne prend de commande. L'API joint le pont par `host.docker.internal` (vérifié : un serveur lié au seul 127.0.0.1 de l'hôte répond au conteneur). Routes `GET /local-runtimes`, `POST`/`DELETE /local-runtimes/pairing`. Tests : `apps/local-bridge/tests` (38 : appairage 9, détection 10, serveur 14, démarrage 5 dont l'affichage dans une console cp1252), `apps/api/tests/api/test_local_runtimes.py` (12). **En réel** : pont lancé, mauvais code → 403 `pairing_refused`, bon code → associé ; appel direct sans jeton → 401, avec `Origin` → 403 ; dissociation → fichier d'appairage effacé côté pont, secret supprimé côté API |
+| 4.2 | Détection `codex` / `claude` / `gh` (version, statut) **sans lire aucun fichier d'auth** | Statuts `installed` / `needs_login` / `connected` / `blocked_by_policy` | DONE — `nfactory_bridge.detection` : `which` puis seulement `--version` et la commande de statut officielle (`codex login status`, `claude auth status --json`, `gh auth status`), lues sur stdout et stderr ; aucun fichier d'authentification ouvert. Statuts `not_installed` / `installed` (statut illisible ou délai dépassé) / `needs_login` / `connected` ; Claude Code : `modes = {handoff: available, runtime: blocked_by_policy}` (§6.5). Ne sortent que l'état, la version et la méthode de connexion Codex (`chatgpt` / `api_key`) : courriel, organisation, offre et sortie brute restent sur la machine (test). L'API revalide la réponse (schéma borné). Dashboard : page Moteurs IA, section **Outils locaux** (état du pont, formulaire « Code d'appairage », une carte par outil avec glyphe + libellé, version, commande de connexion officielle si besoin, modes) ; tests `local-tools` (8), `providers-view` mis à jour. **Sur ce poste** : Codex 0.155.1 connecté (compte ChatGPT), Claude Code 2.1.316 connecté (relais seulement), `gh` non installé ; vu dans le navigateur. Limite : sous Linux sans Docker Desktop, `host.docker.internal` ne mène pas au loopback de l'hôte (variante à documenter) |
+| 4.3 | Runtime Codex (exec ou app-server selon docs courantes) : petit patch avec consentement, événements, diff | Critère §6.4 | TODO |
+| 4.4 | Claude Code **handoff** : brief + workspace → lancement par l'utilisateur → import du diff et des résultats | Diff importé puis testé | TODO |
+| 4.5 | Git : worktree, branche `nfactory/<slug>/<run-id>`, manifest des fichiers modifiés, rollback | Les modifications de l'utilisateur ne sont jamais écrasées (test) | DONE — `nfactory_bridge.git_workspace` (côté pont : le dépôt, `codex` et `gh` sont sur le poste de l'utilisateur ; ADR-0008). `prepare` : `git worktree` propre au run, branche `nfactory/<projet>/<run>` créée depuis un commit, jamais réutilisée ; noms vérifiés. `apply_files` : chemins vérifiés (`..`, absolu, lecteur, `.git` refusés), écriture tout ou rien, **conflit** si un fichier a été modifié hors de NFactory (copie ≠ index, ou fichier non suivi sur le chemin), sans faux conflit avec `core.autocrlf`. `manifest` (ajouté / modifié / supprimé) et `diff` contre le commit de départ, y compris après commit ; `commit` local (`local_commit_created`) ; `rollback` supprime worktree et branche, refuse toute branche hors `nfactory/`. Tests : `apps/local-bridge/tests/test_git_workspace.py` (21, vrai git sur dépôts jetables), dont : modifications non commitées et fichiers non suivis de l'utilisateur identiques (HEAD, branche, `git status`, contenu) après préparation, écriture, commit et retour arrière ; fichier modifié à la main dans le worktree laissé intact. Limite : pas encore exposé par une route du pont ni relié à un run (vient avec 4.3 / 4.6, avec une liste de dépôts autorisés tenue côté pont) |
+| 4.6 | GitHub : prepare → **approbation** → push + PR brouillon ; statuts séparés et vérifiés via l'API | Uniquement sur un repo de test autorisé ; sinon ZIP | TODO |
+| 4.7 | UI diff, statut PR, approbation GitHub | Le bouton de push est séparé de « Générer » | TODO |
+
+### PHASE 5 — Dashboard premium + évaluations (P1) · taille L
+
+| ID | Tâche | Critère d'acceptation | Statut |
+|---|---|---|---|
+| 5.1 | Overview : KPIs réels + filtres ; métriques §14.1 | Chaque chiffre a une requête source | TODO |
+| 5.2 | Live Factory : graphe d'agents (React Flow), traces OTel, coûts | Graphe = étapes réelles du run | TODO |
+| 5.3 | `evals/` : 30 scénarios (10 web/API, 8 Excel, 6 PowerShell, 6 feature) + cas adversariaux ; rapport JSON/HTML | Rapport généré par une commande | TODO |
+| 5.4 | Approval center + audit log + RBAC de base | Tests d'autorisation | TODO |
+| 5.5 | Recipes réutilisables (F38), comparaison de providers (F35) | Recette rejouable | TODO |
+| 5.6 | E2E Playwright + test de charge de base mesuré | Résultats chiffrés et sourcés | TODO |
+
+### PHASE 6 — Enterprise-ready (P2) · taille XL
+
+SSO, RBAC étendu, connector SDK, MCP optionnel, packs de templates, déploiement cloud, politiques par workspace, revue de sécurité et juridique. Interfaces préparées au besoin en `READY` ; détail des tâches à écrire en fin de phase 5.
+
+---
+
+## 4. Correspondance fonctionnalités → phases
+
+| Phase | Fonctionnalités |
+|---|---|
+| 0 | F03 (base), F37 (base), F40 |
+| 1 | F01, F02, F04 (v1), F09, F14, F15, F17, F18, F21, F23, F24 (base), F26 (base), F27, F37, F39 |
+| 2 | F05, F08, F27 (coûts) |
+| 3 | F04 (10 rôles), F10, F11, F16, F19, F20, F28 |
+| 4 | F06, F07, F12, F13, F29 |
+| 5 | F03 (complet), F22, F25, F26, F30, F33, F35, F38 |
+| 6 | F31, F32, F34, F36 |
+
+---
+
+## 5. Blocages et actions requises de ta part
+
+| Quand | Action | Commande |
+|---|---|---|
+| **Avant la phase 0.4** | Démarrer Docker Desktop | lancer l'application Docker Desktop |
+| Phase 2 (facultatif) | Fournir les clés API des providers à tester en réel | saisie dans l'UI ou `.env` |
+| Phase 4 | ~~Installer et connecter GitHub CLI~~ fait le 2026-11-02 (gh 2.103.3, connecté) | `winget install GitHub.cli` puis `gh auth login` |
+| Phase 4 | Fournir un **dépôt de test** autorisé pour les PR | — |
+| Phase 4 | ~~Vérifier que Codex est connecté (flux officiel)~~ vérifié le 2026-11-02 par le pont (compte ChatGPT) | `codex login` |
+| Phase 4 | Décision sur Claude Code piloté sur abonnement après lecture de *Legal and compliance* | handoff par défaut en attendant |
+| Facultatif | PowerShell 7 sur l'hôte (sinon tout passe par la sandbox) | `winget install Microsoft.PowerShell` |
+
+---
+
+## 6. Risques
+
+| Risque | Parade |
+|---|---|
+| Périmètre énorme | Tranches verticales strictes, statuts honnêtes, P2 seulement en interfaces |
+| Python 3.14 hôte vs bibliothèques | Conteneurs en 3.13 ; `uv` épingle la version |
+| ARQ peu maintenu | Tranché : ARQ 0.28 (avril 2026) gardé, `redis<6` ; repli SAQ documenté (ADR-0003) |
+| API LangGraph et SDK providers qui changent | Versions verrouillées ; vérification des docs (§22) avant chaque adaptateur |
+| Lenteur des montages de fichiers Docker Desktop sous Windows | Volumes nommés pour workspaces et artefacts |
+| Tests des projets générés sans réseau | Dépendances pré-installées dans l'image sandbox (D9) |
+
+---
+
+## 7. Commandes (complétées au fil de l'implémentation)
+
+```powershell
+# Installation
+./scripts/bootstrap.ps1
+# Lancer
+./scripts/dev.ps1            # = docker compose up --build
+# Vérifier
+./scripts/check.ps1          # lint, types, tests Python + dashboard
+uv run python scripts/doctor.py      # diagnostic (sans afficher de secret)
+uv run python scripts/smoke_test.py  # bout en bout sur la stack lancée
+```
+
+| URL | Service |
+|---|---|
+| http://127.0.0.1:3000 | Dashboard |
+| http://127.0.0.1:8000/docs | API (OpenAPI) |
+| 127.0.0.1:55432 / 56379 | PostgreSQL / Redis (accès local uniquement) |
+| (aucun port publié) | Sandbox : joignable seulement par le worker |
+
+---
+
+## 8. Journal de session
+
+### 2026-11-01 — Session 1
+- Lecture de la spécification, relevé de l'environnement, rédaction de ce plan.
+- Phase 0 implémentée (voir tableau). Méthode : tests d'abord, un module par domaine, commentaires en anglais.
+- Preuves : `check.ps1` vert (100 tests Python dont intégration PostgreSQL, 21 tests dashboard, ruff, mypy strict, ESLint, tsc), `bootstrap.ps1` exécuté sans `.env`, smoke test 6/6, rendu vérifié dans un navigateur.
+- Écarts par rapport au plan initial :
+  - pilote **psycopg** au lieu d'asyncpg (un seul pilote avec LangGraph, ADR-0002) ;
+  - mode local : un seul espace `wks_local`, les projets de démo y sont rangés avec `is_demo` ;
+  - le seed démo vit dans `apps/api/app/demo` et est lancé par le service `migrate` (pas de `scripts/seed_demo.py`) ;
+  - pas de `@vitejs/plugin-react` (conflit Babel 7/8 avec la CLI shadcn) : Vitest compile le JSX seul ;
+  - adresses `127.0.0.1` au lieu de `localhost` (résolution IPv6 lente sous Windows).
+- Problèmes rencontrés et corrigés : boucle asyncio Windows pour psycopg, `.CMD` npm introuvables depuis Python, PowerShell 5.1 (stderr fatal, accents sans BOM).
+- `gh` installé mais **non connecté** ; dépôt distant reporté à ta demande.
+- **Prochaine étape :** phase 1 — événements SSE (1.2), file de jobs (1.3), graphe LangGraph (1.4), templates `python-api` / `excel-automation` (1.5), sandbox v1 (1.6).
+
+### 2026-11-01 — Session 2 (phase 1)
+- Phase 1 implémentée (voir tableau) : catalogue de recettes code et non-code, 3 recettes, agents à sortie Pydantic, graphe LangGraph avec réparation bornée et checkpoints Postgres, job ARQ, sandbox, API des runs (lancement, SSE, annulation, fichiers, artefacts), pages `/new` et `/runs/[id]`.
+- Preuves : `check.ps1` vert (258 tests Python, 42 tests dashboard, ruff, mypy strict, ESLint, tsc) ; `docker compose up --wait` : 7 services sains ; smoke test 10/10 dont un vrai run Excel dans Docker ; parcours à la souris dans le navigateur.
+- Changements de structure : `Workspace` et `record_event` déplacés dans `nfactory_core` (partagés API/worker) ; fixtures PostgreSQL de test à la racine (`conftest.py`) ; `scripts/ensure_secrets.py` complète `.env` (nouveau `NFACTORY_SANDBOX_TOKEN`) sans afficher de valeur, appelé par `bootstrap` et `dev`.
+- Aucun commit (en attente de ton accord), aucun accès réseau externe par les runs.
+- Points `PARTIAL` fermés le même jour :
+  - **budget** appliqué ;
+  - **`MAX_AGENT_STEPS`** appliqué ;
+  - **`trace_id`** sur chaque sortie d'agent ;
+  - **flux SSE réveillé par Redis**, avec repli automatique sur la vérification périodique.
+- Bugs trouvés par les tests et corrigés :
+  - la confirmation d'abonnement Redis réveillait le flux à tort ;
+  - le sandbox répondait 401 sans lire la requête, et Windows coupait parfois la connexion (`test_refusal_is_always_a_clean_401`, 600 refus par passe).
+- Preuves : `check.ps1` vert (270 tests Python, 42 tests dashboard) ; smoke test 10/10 ; dans Docker, le flux SSE d'un run est abonné à `nfactory:run:<id>` et reçoit ses 32 événements jusqu'à `run.completed`.
+- Phase 1 complétée à 100 % le 2026-11-02 :
+  - pages **Usine en direct** (`/live`) et **Réglages** (`/settings`), limites des runs par espace de travail ;
+  - **Alembic** dans l'API générée, avec un test qui compare migrations et modèles ;
+  - **explication** affichée en sections ;
+  - **reprise réelle** après un `docker kill` du worker (bail Redis + libération du verrou ARQ) ;
+  - l'API rapporte le sandbox d'après la même configuration que le worker (`compose.yaml`).
+- Hors phase 1, par décision de la spec : isolation du sandbox par run (D8, phase 3), rétention et export des données (phase 6).
+- Preuves : `check.ps1` vert (282 tests Python, 57 tests dashboard) ; smoke test 10/10 ; reprise après `docker kill` du worker.
+- **Prochaine étape :** phase 2 (fournisseurs réels), à partir de `docs/research/providers.md`.
+
+### 2026-11-02 — Session 3 (phase 2)
+- Phase 2 implémentée (voir tableau) :
+  - couche fournisseurs partagée API/worker (ADR-0006) : 9 adaptateurs httpx, erreurs normalisées, SSRF, prix ;
+  - secrets chiffrés, catalogue de modèles, routage par rôle, pause « votre décision est attendue » en cas d'échec d'un moteur ;
+  - page **Moteurs IA** et bandeau de décision sur le run.
+- Changements de structure :
+  - le worker n'a plus ses propres types de fournisseur ; `PipelineDeps.llm` devient `engines` (un moteur par rôle) ;
+  - nouvelle migration `secrets` (+ `provider_connections.last_error`) ; l'autogénération Alembic ignore les tables LangGraph ;
+  - worker ARQ sans conservation de résultat (`keep_result: 0`) pour pouvoir remettre en file un run en pause ;
+  - Ollama joint depuis Docker par `host.docker.internal` (`OLLAMA_DOCKER_URL` pour changer).
+- Preuves : `check.ps1` vert (523 tests Python + 6 tests live ignorés sans clé, 73 tests dashboard, ruff, mypy, ESLint, tsc) ; migration appliquée sur la base Docker ; smoke test 14/14 ; parcours Moteurs IA dans le navigateur.
+- Aucun commit, aucune clé lue ni affichée, aucun appel à un fournisseur réel.
+- **Prochaine étape :** phase 3, en commençant par la base de connaissances (RAG, tâches 3.2 à 3.6).
+
+### 2026-11-02 — Session 4 (phase 3)
+- Faits : base de connaissances 3.2 à 3.6, agents conditionnels 3.1, recettes 3.7 (voir tableau). `CURRENT_PHASE` passe à 3 : les types webapp et PowerShell sont disponibles.
+- Changements de structure :
+  - `nfactory_core.roster` décide des étapes d'un run ; l'API, le worker et la démo créent les lignes d'étapes à partir de lui ;
+  - le runner autorise `python`, `pwsh` et `node` ; un outil absent en local répond 127 avec un message en français ;
+  - la vérification additionne les rapports JUnit de tous les contrôles de tests ;
+  - `Workspace.files()` parcourt l'arborescence sans suivre aucun lien (symlink ou jonction) et ignore `node_modules` et `.vite`.
+- Preuves : `check.ps1` vert (684 tests Python + 6 tests live ignorés sans clé, 96 tests dashboard, ruff, mypy, ESLint, tsc) ; smoke test 22/22 sur la stack Docker reconstruite avec le superviseur ; timeline des corrections vérifiée dans le navigateur.
+- Aucun commit, aucune clé lue ni affichée, aucun appel à un fournisseur réel.
+- 3.8 : sandbox v2 en place (superviseur, un conteneur jetable par commande, tests §19.1 contre un vrai Docker). Le service `sandbox` v1 est remplacé par `sandbox-supervisor` ; relancer avec `docker compose up -d --build --remove-orphans`.
+- 3.9 : réparation tracée, recherche de secrets, règles de sécurité ruff, relecteur mieux informé. Nouveaux événements `repair.applied`, `repair.abandoned`, `security.scanned`.
+- 3.10 : aperçu de l'application web générée, confiné dans le sandbox et servi par une passerelle dédiée.
+- Preuves 3.10 : `check.ps1` vert (725 tests Python + 6 tests live ignorés sans clé, 102 tests dashboard, ruff, mypy, ESLint, tsc) ; 9 tests d'isolation contre un vrai Docker ; smoke test 25/25 dont l'aperçu (démarré, servi par la passerelle, arrêté).
+- 3.11 : runs enfants (scénario E) : évolution d'un run livré, nouvelle validation, diff dans le dashboard. Correctif trouvé en navigateur : la passerelle d'aperçu attend l'application qui démarre (connexion refusée → nouvel essai pendant 30 s) au lieu d'afficher « Aperçu arrêté ».
+- Validation phase 3 : démo « IT licence manager » rejouable dans le smoke test (voir la ligne « Validation phase 3 »). Export Excel ajouté aux applications web générées ; en mode démo, une app web reprend l'entité du domaine.
+- Preuves 3.11 + validation : `check.ps1` vert (749 tests Python + 6 tests live ignorés sans clé, 112 tests dashboard, ruff, mypy, ESLint, tsc) ; smoke test réussi, toutes vérifications vertes, sur la stack reconstruite (démo licences, aperçu, export Excel, évolution) ; navigateur : diff de l'évolution, aperçu du run enfant avec le nouveau champ, sources citées.
+- Aucun commit, aucune clé lue ni affichée, aucun appel à un fournisseur réel.
+- **Phase 3 terminée.**
+
+### 2026-11-02 — Session 5 (phase 4, en cours)
+- 4.1, 4.2 : pont local (ADR-0008) et détection de `codex` / `claude` / `gh`, section « Outils locaux » du dashboard. Les cartes « Agents de code locaux » (phase 4, désactivées) sont remplacées par cette section.
+- Preuves : `check.ps1` vert (799 tests Python + 6 tests live ignorés sans clé, 120 tests dashboard, ruff, mypy dont le pont, ESLint, tsc) ; essai réel pont + API conteneurisée + navigateur (voir 4.1 et 4.2).
+- Aucun commit ; aucun fichier d'authentification lu ; les commandes de statut lancées n'affichent que des clés et des types (pas les valeurs) pendant l'étude de leur format.
+- `gh` 2.103.3 installé et connecté par l'utilisateur ; le pont le détecte (`connected`). Deux Codex sur le poste (0.155.1 de l'application OpenAI, 0.142.5 dans `C:\nvm4w\nodejs`, prioritaire dans le PATH) : signalé.
+- 4.5 : travail Git en worktree (voir le tableau). Test instable trouvé et corrigé : le pont répondait 413 avant d'avoir lu le corps refusé, et Windows coupait parfois la connexion (2 échecs sur 300 essais, 0 après correctif).
+- Preuves 4.5 : `check.ps1` vert (820 tests Python + 6 tests live ignorés sans clé, 120 tests dashboard, ruff, mypy, ESLint, tsc).
+- **Prochaine étape :** liste de dépôts autorisés côté pont, puis 4.3 (Codex : petit patch avec accord) et 4.4 (relais Claude Code). Besoin de l'utilisateur : un dépôt de test autorisé pour les PR (4.6), et son accord avant un essai réel de Codex (quota ChatGPT).

@@ -1,0 +1,26 @@
+"""FastAPI application. Run: uvicorn app.main:app --reload"""
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+{{export_import}}from app.migrate import upgrade
+from app.routes import router
+
+TITLE = {{title}}
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    upgrade()  # the schema comes from the Alembic migrations
+    yield
+
+
+app = FastAPI(title=TITLE, version="0.1.0", lifespan=lifespan)
+{{export_route}}app.include_router(router)
+
+
+@app.get("/health", tags=["Santé"])
+def health() -> dict[str, str]:
+    return {"status": "ok"}

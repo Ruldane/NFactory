@@ -1,0 +1,15 @@
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+
+    # /api/... reaches the FastAPI backend without the /api prefix (same as the Vite proxy).
+    location /api/ {
+        proxy_pass http://backend:8000/;
+        proxy_set_header Host $host;
+    }
+
+    # The React app handles its own routes.
+    location / {
+        try_files $uri /index.html;
+    }
+}

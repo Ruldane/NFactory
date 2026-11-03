@@ -1,0 +1,73 @@
+BeforeAll {
+    $ScriptPath = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath {{script}}
+    $Header = {{header}}
+    $Valid = {{valid}}
+    $Invalid = {{invalid}}
+
+    function Write-InputFile {
+        param([string] $Name, [string[]] $Line)
+        $path = Join-Path -Path $TestDrive -ChildPath $Name
+        Set-Content -LiteralPath $path -Value $Line -Encoding utf8
+        $path
+    }
+}
+
+Describe {{describe}} {
+    It 'écrit une ligne par entrée, avec le statut OK' {
+        $source = Write-InputFile -Name 'ok.csv' -Line $Header, $Valid
+        $target = Join-Path -Path $TestDrive -ChildPath 'ok-rapport.csv'
+
+        & $ScriptPath -InputPath $source -OutputPath $target
+
+        $rows = @(Import-Csv -LiteralPath $target -Encoding utf8)
+        $rows.Count | Should -Be 1
+        $rows[0].'Statut contrôle' | Should -Be 'OK'
+    }
+
+    It 'signale une ligne invalide sans arrêter le traitement' {
+        $source = Write-InputFile -Name 'mixte.csv' -Line $Header, $Valid, $Invalid
+        $target = Join-Path -Path $TestDrive -ChildPath 'mixte-rapport.csv'
+
+        & $ScriptPath -InputPath $source -OutputPath $target
+
+        $rows = @(Import-Csv -LiteralPath $target -Encoding utf8)
+        $rows.Count | Should -Be 2
+        $rows[1].'Statut contrôle' | Should -Be 'Invalide'
+        $rows[1].'Détail contrôle' | Should -Not -BeNullOrEmpty
+    }
+
+    It "n'écrit rien avec -WhatIf" {
+        $source = Write-InputFile -Name 'essai.csv' -Line $Header, $Valid
+        $target = Join-Path -Path $TestDrive -ChildPath 'essai-rapport.csv'
+
+        & $ScriptPath -InputPath $source -OutputPath $target -WhatIf
+
+        Test-Path -LiteralPath $target | Should -BeFalse
+    }
+
+    It 'refuse un fichier sans les colonnes attendues' {
+        $source = Write-InputFile -Name 'autre.csv' -Line 'autre', 'valeur'
+        $target = Join-Path -Path $TestDrive -ChildPath 'autre-rapport.csv'
+
+        { & $ScriptPath -InputPath $source -OutputPath $target } | Should -Throw '*Colonnes manquantes*'
+    }
+
+    It 'refuse un fichier introuvable' {
+        $source = Join-Path -Path $TestDrive -ChildPath 'absent.csv'
+        $target = Join-Path -Path $TestDrive -ChildPath 'absent-rapport.csv'
+
+        { & $ScriptPath -InputPath $source -OutputPath $target } | Should -Throw
+    }
+
+    It 'journalise le traitement, même avec -WhatIf' {
+        $source = Write-InputFile -Name 'journal.csv' -Line $Header, $Valid, $Invalid
+        $target = Join-Path -Path $TestDrive -ChildPath 'journal-rapport.csv'
+        $log = Join-Path -Path $TestDrive -ChildPath 'logs/traitement.log'
+
+        & $ScriptPath -InputPath $source -OutputPath $target -LogPath $log -WhatIf
+
+        $text = Get-Content -LiteralPath $log -Raw -Encoding utf8
+        $text | Should -Match '2 ligne\(s\) lue\(s\), 1 invalide\(s\)'
+        $text | Should -Match '\[WARN\]'
+    }
+}

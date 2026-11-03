@@ -1,0 +1,38 @@
+# {{title}}
+
+{{summary}}
+
+Projet généré par NFactory (recette `excel-automation` v{{version}}).
+
+## Objectifs
+
+{{goals}}
+
+## Ce que vous obtenez
+
+- `output/{{output_name}}` : le classeur, avec quatre onglets.
+  - **Synthèse** : titre, nombre de lignes importées, date de génération.
+  - **Données** : les deux exports fusionnés.
+  - **KPI** : volume total, durée moyenne, objectif et taux d'atteinte par équipe, calculés par des formules Excel. Ils restent donc justes si vous modifiez les données.
+  - **Graphique** : volume total par équipe.
+- `build_report.py` : le script qui régénère le classeur.
+- `data/` : des exports d'exemple **synthétiques**, à remplacer par les vôtres (mêmes colonnes, séparateur `;`).
+- `tests/` : des tests qui recalculent chaque formule à partir des CSV.
+
+## Régénérer le classeur
+
+```bash
+uv sync
+uv run python build_report.py
+```
+
+## Vérifier
+
+```bash
+uv run pytest
+```
+
+## Limites connues
+
+- Aucune macro. Le fichier est un `.xlsx` standard.
+- Les formules sont écrites mais ne sont pas pré-calculées : Excel ou LibreOffice les calcule à l'ouverture.

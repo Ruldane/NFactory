@@ -1,0 +1,37 @@
+# Static guarantees on the script, read from its syntax tree: no remote access, no
+# privilege escalation, no dynamic code. They hold whatever the input data contains.
+BeforeAll {
+    $path = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath {{script}}
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref] $tokens, [ref] $errors)
+    $Commands = @(
+        $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true) |
+            ForEach-Object { $_.GetCommandName() } |
+            Where-Object { $_ }
+    )
+    $Parameters = @(
+        $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandParameterAst] }, $true) |
+            ForEach-Object { $_.ParameterName }
+    )
+    $ParseErrors = $errors
+}
+
+Describe 'Sécurité du script' {
+    It 'se lit sans erreur de syntaxe' {
+        $ParseErrors | Should -BeNullOrEmpty
+    }
+
+    It "n'ouvre aucune session ni connexion distante" {
+        $remote = 'Invoke-Command', 'Enter-PSSession', 'New-PSSession', 'New-CimSession',
+            'Invoke-WebRequest', 'Invoke-RestMethod', 'Start-BitsTransfer', 'Send-MailMessage'
+        $Commands | Where-Object { $_ -in $remote } | Should -BeNullOrEmpty
+        $Parameters | Where-Object { $_ -in 'ComputerName', 'Session', 'CimSession' } | Should -BeNullOrEmpty
+    }
+
+    It "ne demande aucun privilège et n'exécute aucun code dynamique" {
+        $risky = 'Set-ExecutionPolicy', 'Start-Process', 'Invoke-Expression', 'Add-Type',
+            'Invoke-Item', 'Remove-Item', 'Stop-Computer', 'Restart-Computer'
+        $Commands | Where-Object { $_ -in $risky } | Should -BeNullOrEmpty
+    }
+}
