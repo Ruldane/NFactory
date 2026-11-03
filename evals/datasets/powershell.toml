@@ -1,0 +1,62 @@
+# PowerShell scenarios (spec §14.2: 6 PowerShell). Checks run PSScriptAnalyzer and
+# Pester in the sandbox image; without pwsh, the local runner skips these cases.
+
+[[case]]
+id = "ps-temp"
+project_type = "powershell"
+title = "Nettoyage des dossiers temporaires"
+request = "Un script qui nettoie les fichiers temporaires de plus de 30 jours, avec -WhatIf."
+tags = ["maintenance"]
+[case.expect]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "ps-disque"
+project_type = "powershell"
+title = "Rapport d'espace disque"
+request = "Un script qui produit un rapport CSV de l'espace disque libre des serveurs."
+tags = ["report"]
+[case.expect]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "ps-services"
+project_type = "powershell"
+title = "Inventaire des services"
+request = "Un script qui liste les services Windows arrêtés alors qu'ils sont en démarrage automatique."
+tags = ["report"]
+[case.expect]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "ps-logs"
+project_type = "powershell"
+title = "Archivage des journaux"
+request = "Un script qui archive les journaux applicatifs de la veille dans un ZIP."
+tags = ["maintenance"]
+[case.expect]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "ps-comptes"
+project_type = "powershell"
+title = "Comptes inactifs"
+request = "Un script qui signale les comptes utilisateurs inactifs depuis 90 jours, sans rien supprimer."
+tags = ["security"]
+[case.expect]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "ps-licences"
+project_type = "powershell"
+title = "Export des licences"
+request = "Un script qui exporte la liste des licences en CSV."
+tags = ["report"]
+[case.expect]
+min_tests = 9
+deliverables = [".zip"]

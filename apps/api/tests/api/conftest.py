@@ -104,3 +104,23 @@ async def provider_client(
         nfactory_secret_key="api-tests-master-key-0123456789abcdef",
     ):
         yield http
+
+
+SSO_SETTINGS: dict[str, object] = {
+    "nfactory_auth_mode": "oidc",
+    "nfactory_oidc_client_id": "nfactory-test.apps.googleusercontent.com",
+    "nfactory_oidc_client_secret": "s3cret-client",
+    "nfactory_oidc_redirect_url": "http://127.0.0.1:3000/api/v1/auth/callback",
+    "nfactory_oidc_allowed_domains": "example.fr",
+    "nfactory_oidc_allowed_emails": "grace@gmail.com",
+    "nfactory_oidc_owner_emails": "ada@example.fr",
+}
+
+
+@pytest.fixture
+async def sso_client(
+    migrated_database_url: str, storage: Storage, queue: MemoryQueue
+) -> AsyncIterator[AsyncClient]:
+    """SSO mode (ADR-0013) against Google's issuer, which the tests simulate with respx."""
+    async for http in _client(migrated_database_url, storage, queue, demo=False, **SSO_SETTINGS):
+        yield http

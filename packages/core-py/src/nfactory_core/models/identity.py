@@ -16,6 +16,8 @@ class User(Base):
     id: Mapped[str] = id_column("usr")
     email: Mapped[str | None] = mapped_column(String(320), unique=True)
     local_identity: Mapped[str | None] = mapped_column(String(200), unique=True)
+    # SSO identity (ADR-0013): "<issuer>|<sub>", stable when the e-mail changes.
+    oidc_subject: Mapped[str | None] = mapped_column(String(300), unique=True)
     display_name: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = created_column()
 

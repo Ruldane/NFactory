@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, Response, UploadFile
 
-from app.context import Context, Providers, Queue, Session
+from app.context import CanBuild, CanConfigure, Context, Providers, Queue, Session
 from app.errors import AppError
 from app.schemas.knowledge import (
     DocumentDetail,
@@ -14,7 +14,7 @@ from app.schemas.knowledge import (
     SearchOut,
     UploadOut,
 )
-from app.services import knowledge
+from app.services import audit, knowledge
 from nfactory_core.knowledge.extract import MAX_BYTES
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 async def upload_document(
     response: Response,
     session: Session,
-    ctx: Context,
+    ctx: CanBuild,
     queue: Queue,
     file: Annotated[UploadFile, File()],
     project_id: Annotated[str | None, Form()] = None,
@@ -54,8 +54,10 @@ async def get_document(document_id: str, session: Session, ctx: Context) -> Docu
 
 
 @router.delete("/documents/{document_id}", status_code=204)
-async def delete_document(document_id: str, session: Session, ctx: Context) -> Response:
+async def delete_document(document_id: str, session: Session, ctx: CanBuild) -> Response:
     await knowledge.delete_document(session, ctx, document_id)
+    audit.record(session, ctx, "knowledge.document_delete", document_id)
+    await session.commit()
     return Response(status_code=204)
 
 
@@ -80,7 +82,11 @@ async def get_settings(session: Session, ctx: Context) -> KnowledgeSettingsOut:
 
 @router.put("/settings")
 async def put_settings(
-    body: KnowledgeSettingsIn, session: Session, ctx: Context, queue: Queue
+    body: KnowledgeSettingsIn, session: Session, ctx: CanConfigure, queue: Queue
 ) -> KnowledgeSettingsOut:
     """A new embedding engine re-indexes every document; the old vectors are not used."""
-    return await knowledge.save_settings(session, ctx, queue, body.embedding)
+    view = await knowledge.save_settings(session, ctx, queue, body.embedding)
+    details = body.model_dump(mode="json")
+    audit.record(session, ctx, "knowledge.settings", ctx.default_workspace_id, details=details)
+    await session.commit()
+    return view

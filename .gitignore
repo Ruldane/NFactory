@@ -24,6 +24,8 @@ next-env.d.ts
 /data/
 evals/reports/*
 !evals/reports/.gitkeep
+loadtests/reports/*
+!loadtests/reports/.gitkeep
 
 # OS / IDE
 .DS_Store
@@ -33,3 +35,4 @@ Thumbs.db
 
 # Browser automation screenshots
 .playwright-mcp/
+apps/dashboard/e2e-results/

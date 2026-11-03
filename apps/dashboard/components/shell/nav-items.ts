@@ -16,8 +16,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/providers", label: "Moteurs IA", phase: 2, ready: true },
   { href: "/knowledge", label: "Base de connaissances", phase: 3, ready: true },
   { href: "/agents", label: "Agents de code", phase: 4, ready: true },
+  { href: "/recipes", label: "Recettes", phase: 5, ready: true },
   { href: "/evaluations", label: "Évaluations", phase: 5, ready: false },
-  { href: "/audit", label: "Audit & sécurité", phase: 5, ready: false },
+  { href: "/audit", label: "Approbations & audit", phase: 5, ready: true },
   { href: "/settings", label: "Réglages", phase: 1, ready: true },
 ];
 

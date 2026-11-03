@@ -4,7 +4,17 @@ from typing import Annotated
 from fastapi import APIRouter, Header, Query, Request, Response, status
 from sse_starlette import EventSourceResponse
 
-from app.context import AppSettings, Context, Previews, Queue, RunWakeups, Session, Sessions
+from app.context import (
+    AppSettings,
+    CanApprove,
+    CanBuild,
+    Context,
+    Previews,
+    Queue,
+    RunWakeups,
+    Session,
+    Sessions,
+)
 from app.schemas.common import Items
 from app.schemas.runs import (
     ApprovalDecision,
@@ -15,8 +25,10 @@ from app.schemas.runs import (
     RunCreate,
     RunDetail,
 )
-from app.services import previews, run_approvals, run_outputs, runs
+from app.schemas.trace import RunTrace
+from app.services import audit, previews, run_approvals, run_outputs, runs
 from app.services.run_events import parse_last_event_id, stream_run
+from app.services.run_trace import run_trace
 
 router = APIRouter(tags=["runs"])
 
@@ -24,7 +36,7 @@ router = APIRouter(tags=["runs"])
 @router.post("/projects/{project_id}/runs", status_code=status.HTTP_201_CREATED)
 async def launch_run(
     sessions: Sessions,
-    ctx: Context,
+    ctx: CanBuild,
     settings: AppSettings,
     queue: Queue,
     project_id: str,
@@ -46,26 +58,49 @@ async def get_run(session: Session, ctx: Context, run_id: str) -> RunDetail:
 
 
 @router.post("/runs/{run_id}/cancel")
-async def cancel_run(sessions: Sessions, ctx: Context, run_id: str) -> RunDetail:
-    return await runs.cancel_run(sessions, ctx, run_id)
+async def cancel_run(sessions: Sessions, ctx: CanBuild, run_id: str) -> RunDetail:
+    detail = await runs.cancel_run(sessions, ctx, run_id)
+    await audit.record_for_run(sessions, ctx, "run.cancel", run_id)
+    return detail
 
 
 @router.post("/runs/{run_id}/approvals/{approval_id}/approve")
 async def approve(
     sessions: Sessions,
-    ctx: Context,
+    ctx: CanApprove,
     queue: Queue,
     run_id: str,
     approval_id: str,
     decision: ApprovalDecision,
 ) -> RunDetail:
     """Resume a paused run, on the same engine or on the replacement chosen."""
-    return await run_approvals.approve(sessions, ctx, queue, run_id, approval_id, decision)
+    detail = await run_approvals.approve(sessions, ctx, queue, run_id, approval_id, decision)
+    replacement = decision.replacement.model_dump() if decision.replacement else None
+    await audit.record_for_run(
+        sessions,
+        ctx,
+        "approval.decided",
+        run_id,
+        target=approval_id,
+        decision="approved",
+        details={"run_id": run_id, "replacement": replacement},
+    )
+    return detail
 
 
 @router.post("/runs/{run_id}/approvals/{approval_id}/reject")
-async def reject(sessions: Sessions, ctx: Context, run_id: str, approval_id: str) -> RunDetail:
-    return await run_approvals.reject(sessions, ctx, run_id, approval_id)
+async def reject(sessions: Sessions, ctx: CanApprove, run_id: str, approval_id: str) -> RunDetail:
+    detail = await run_approvals.reject(sessions, ctx, run_id, approval_id)
+    await audit.record_for_run(
+        sessions,
+        ctx,
+        "approval.decided",
+        run_id,
+        target=approval_id,
+        decision="rejected",
+        details={"run_id": run_id},
+    )
+    return detail
 
 
 @router.get("/runs/{run_id}/events")
@@ -111,7 +146,7 @@ async def list_artifacts(session: Session, ctx: Context, run_id: str) -> Items[A
 
 @router.post("/runs/{run_id}/preview")
 async def start_preview(
-    session: Session, ctx: Context, settings: AppSettings, control: Previews, run_id: str
+    session: Session, ctx: CanBuild, settings: AppSettings, control: Previews, run_id: str
 ) -> PreviewOut:
     public = settings.nfactory_preview_public_url
     return await previews.start_preview(session, ctx, control, public, run_id)
@@ -126,5 +161,11 @@ async def preview_status(
 
 
 @router.delete("/runs/{run_id}/preview", status_code=status.HTTP_204_NO_CONTENT)
-async def stop_preview(session: Session, ctx: Context, control: Previews, run_id: str) -> None:
+async def stop_preview(session: Session, ctx: CanBuild, control: Previews, run_id: str) -> None:
     await previews.stop_preview(session, ctx, control, run_id)
+
+
+@router.get("/runs/{run_id}/trace")
+async def get_trace(session: Session, ctx: Context, run_id: str) -> RunTrace:
+    """The run's trace: its steps, then each agent call and check with its measures."""
+    return await run_trace(session, ctx, run_id)

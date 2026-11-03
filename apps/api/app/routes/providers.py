@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.context import Context, Providers, Session
+from app.context import CanConfigure, Context, Providers, Session
 from app.schemas.providers import (
     CatalogModelIn,
     CatalogModelOut,
@@ -12,7 +12,7 @@ from app.schemas.providers import (
     ProviderView,
     ValidationOut,
 )
-from app.services import model_catalog, providers
+from app.services import audit, model_catalog, providers
 
 router = APIRouter(prefix="/providers", tags=["providers"])
 
@@ -24,19 +24,28 @@ async def list_providers(session: Session, ctx: Context, deps: Providers) -> Pro
 
 @router.put("/{kind}/configuration")
 async def configure(
-    kind: str, data: ProviderConfigIn, session: Session, ctx: Context, deps: Providers
+    kind: str, data: ProviderConfigIn, session: Session, ctx: CanConfigure, deps: Providers
 ) -> ProviderView:
     """Save region, URL and key. The key is encrypted and never returned."""
-    return await providers.configure(session, ctx, deps, kind, data)
+    view = await providers.configure(session, ctx, deps, kind, data)
+    # Only the kind: the key itself never leaves the secret store.
+    audit.record(session, ctx, "provider.configure", kind, details={"kind": kind})
+    await session.commit()
+    return view
 
 
 @router.delete("/{kind}/configuration")
-async def remove(kind: str, session: Session, ctx: Context, deps: Providers) -> ProviderView:
-    return await providers.remove(session, ctx, deps, kind)
+async def remove(kind: str, session: Session, ctx: CanConfigure, deps: Providers) -> ProviderView:
+    view = await providers.remove(session, ctx, deps, kind)
+    audit.record(session, ctx, "provider.remove", kind, details={"kind": kind})
+    await session.commit()
+    return view
 
 
 @router.post("/{kind}/validate")
-async def validate(kind: str, session: Session, ctx: Context, deps: Providers) -> ValidationOut:
+async def validate(
+    kind: str, session: Session, ctx: CanConfigure, deps: Providers
+) -> ValidationOut:
     """Consented connection test: the only way a provider becomes "connected"."""
     return await providers.validate(session, ctx, deps, kind)
 
@@ -48,12 +57,19 @@ async def list_models(kind: str, session: Session) -> CatalogOut:
 
 @router.put("/{kind}/models/{model_id:path}")
 async def put_model(
-    kind: str, model_id: str, data: CatalogModelIn, session: Session
+    kind: str, model_id: str, data: CatalogModelIn, session: Session, ctx: CanConfigure
 ) -> CatalogModelOut:
-    return await model_catalog.put_model(session, kind, model_id, data)
+    model = await model_catalog.put_model(session, kind, model_id, data)
+    audit.record(session, ctx, "provider.model_set", f"{kind}/{model_id}")
+    await session.commit()
+    return model
 
 
 @router.delete("/{kind}/models/{model_id:path}")
-async def delete_model(kind: str, model_id: str, session: Session) -> dict[str, str]:
+async def delete_model(
+    kind: str, model_id: str, session: Session, ctx: CanConfigure
+) -> dict[str, str]:
     await model_catalog.delete_model(session, kind, model_id)
+    audit.record(session, ctx, "provider.model_remove", f"{kind}/{model_id}")
+    await session.commit()
     return {"removed": model_id}

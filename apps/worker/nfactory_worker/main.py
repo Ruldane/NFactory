@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from nfactory_core.config import Settings, get_settings
 from nfactory_core.events import run_channel
 from nfactory_core.pipeline import RUN_QUEUE
+from nfactory_core.telemetry import tracer_provider
 from nfactory_worker.jobs import process_run
 from nfactory_worker.jobs.agent_checks import check_agent_task as run_agent_check
 from nfactory_worker.jobs.indexing import index_pending_workspaces, index_workspace
@@ -56,6 +57,9 @@ async def startup(ctx: dict[str, Any]) -> None:
     ctx["sessions"] = async_sessionmaker(engine, expire_on_commit=False)
     ctx["settings"] = settings
     ctx["runner"] = make_runner(settings)
+    provider = tracer_provider(settings.otel_exporter_otlp_endpoint, "nfactory-worker")
+    ctx["tracer_provider"] = provider
+    ctx["tracer"] = provider.get_tracer("nfactory.worker") if provider else None
     async with AsyncPostgresSaver.from_conn_string(checkpoint_url(settings)) as saver:
         await saver.setup()
     # Runs left RUNNING by a worker that died: resume them now, not after ARQ's timeout.
@@ -63,6 +67,9 @@ async def startup(ctx: dict[str, Any]) -> None:
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
+    provider = ctx.get("tracer_provider")
+    if provider is not None:
+        provider.shutdown()  # flush the last spans
     engine = ctx.get("engine")
     if engine is not None:
         await engine.dispose()
@@ -88,6 +95,7 @@ async def run_factory(ctx: dict[str, Any], run_id: str) -> str:
             runner=ctx["runner"],
             checkpointer=checkpointer,
             notify=notify,
+            tracer=ctx.get("tracer"),
         )
     return result.outcome if result else "SKIPPED"
 

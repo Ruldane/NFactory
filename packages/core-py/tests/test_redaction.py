@@ -32,3 +32,18 @@ def test_does_not_mutate_input() -> None:
     payload = {"token": "t"}
     redact(payload)
     assert payload == {"token": "t"}
+
+
+def test_token_counts_are_measures_not_secrets() -> None:
+    """Agent calls record how many tokens they used (spec §14.1 cost and traces)."""
+    usage = {"input_tokens": 1000, "output_tokens": 500, "cached_input_tokens": 0}
+
+    assert redact(usage) == usage
+
+
+def test_a_token_value_stays_hidden_even_under_a_count_name() -> None:
+    assert redact({"input_tokens": "sk-" + "a" * 20}) == {"input_tokens": REDACTED}
+    assert redact({"token": 1234, "access_token": "abc"}) == {
+        "token": REDACTED,
+        "access_token": REDACTED,
+    }

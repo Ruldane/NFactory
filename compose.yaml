@@ -17,6 +17,9 @@ x-python-vars: &python-vars
   # The local bridge (task 4.1) runs on the host, bound to its 127.0.0.1 only; Docker
   # Desktop delivers host.docker.internal traffic there. It answers paired requests only.
   NFACTORY_BRIDGE_URL: http://host.docker.internal:8765
+  # Spans of each run (task 5.2) go to this OTLP/HTTP collector when it is set, e.g.
+  # NFACTORY_OTLP_ENDPOINT=http://jaeger:4318 with the telemetry profile. Empty: none.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${NFACTORY_OTLP_ENDPOINT:-}
 
 x-python-env: &python-env
   env_file:
@@ -189,13 +192,14 @@ services:
       api:
         condition: service_healthy
 
-  # Optional tracing UI: docker compose --profile telemetry up
+  # Optional tracing UI (task 5.2). Start it with the worker pointed at it:
+  #   $env:NFACTORY_OTLP_ENDPOINT = "http://jaeger:4318"; docker compose --profile telemetry up -d
+  # The worker sends OTLP/HTTP on the internal network; only the UI is published.
   jaeger:
     image: jaegertracing/jaeger:2.22.0
     profiles: ["telemetry"]
     ports:
       - "127.0.0.1:16686:16686"
-      - "127.0.0.1:4317:4317"
 
 networks:
   default:

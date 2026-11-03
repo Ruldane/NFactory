@@ -143,7 +143,13 @@ export interface Approval {
   id: string;
   action_type: string;
   summary: string;
-  details: { role?: string; provider?: string; model?: string; kind?: string; message?: string };
+  details: {
+    role?: string;
+    provider?: string;
+    model?: string;
+    kind?: string;
+    message?: string;
+  };
   status: string;
   created_at: string;
 }
@@ -161,7 +167,9 @@ export interface RunDetail {
   state: string;
   error: string | null;
   cost_estimate_usd: number | null;
-  budget: Partial<Record<"max_llm_calls" | "max_agent_steps" | "max_repair_attempts", number>>;
+  budget: Partial<
+    Record<"max_llm_calls" | "max_agent_steps" | "max_repair_attempts", number>
+  >;
   trace_id: string | null;
   is_demo: boolean;
   created_at: string;
@@ -372,8 +380,10 @@ export interface KnowledgeSettings {
 }
 
 // Local coding tools seen through the bridge on the user's machine (tasks 4.1, 4.2).
-export type BridgeStatus = "unreachable" | "unpaired" | "paired" | "token_rejected";
-export type LocalRuntimeStatus = "not_installed" | "installed" | "needs_login" | "connected";
+export type BridgeStatus =
+  "unreachable" | "unpaired" | "paired" | "token_rejected";
+export type LocalRuntimeStatus =
+  "not_installed" | "installed" | "needs_login" | "connected";
 
 export interface LocalRuntime {
   kind: "codex" | "claude" | "gh";
@@ -402,14 +412,22 @@ export interface LocalRepo {
 }
 
 // Publication facts, each read back from git and GitHub by the bridge (task 4.6).
-export type PublicationState = "local_commit_created" | "pushed" | "pr_created" | "merged";
+export type PublicationState =
+  "local_commit_created" | "pushed" | "pr_created" | "merged";
 
 export interface Publication {
   repo: string;
   commit: string;
   state: PublicationState | null;
   pushed: boolean;
-  pr: { number: number; url: string; state: string; draft: boolean; head: string; merged: boolean } | null;
+  pr: {
+    number: number;
+    url: string;
+    state: string;
+    draft: boolean;
+    head: string;
+    merged: boolean;
+  } | null;
   verified_at: number;
 }
 
@@ -424,7 +442,15 @@ export type AgentTaskStatus =
   | "discarded";
 
 export interface AgentEvent {
-  type: "started" | "message" | "command" | "file_change" | "completed" | "failed" | "error" | "warning";
+  type:
+    | "started"
+    | "message"
+    | "command"
+    | "file_change"
+    | "completed"
+    | "failed"
+    | "error"
+    | "warning";
   text?: string;
   message?: string;
   command?: string;
@@ -451,7 +477,8 @@ export interface AgentTask {
 }
 
 // A sandbox check of a task's change (task 4.4): the verdict comes from the JUnit report.
-export type AgentCheckStatus = "queued" | "running" | "passed" | "failed" | "not_tested" | "error";
+export type AgentCheckStatus =
+  "queued" | "running" | "passed" | "failed" | "not_tested" | "error";
 
 export interface AgentCheckReport {
   command: string;
@@ -473,4 +500,93 @@ export interface AgentCheck {
   error: string;
   created_at: string;
   finished_at: string | null;
+}
+
+// A run's trace (task 5.2): the run, its stored steps, then each call under its step.
+export interface TraceSpan {
+  id: string;
+  parent_id: string | null;
+  kind: "run" | "step" | "agent" | "check";
+  name: string;
+  start: string | null;
+  end: string | null;
+  duration_s: number | null;
+  status: "ok" | "error" | "running" | "pending" | "skipped";
+  agent_role?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cost_usd?: number | null;
+  calls?: number | null;
+  exit_code?: number | null;
+}
+
+export interface RunTrace {
+  run_id: string;
+  trace_id: string | null;
+  cost_usd: number | null;
+  spans: TraceSpan[];
+}
+
+// RBAC, approval center and audit log (task 5.4, apps/api/app/schemas/access.py).
+export type Permission = "read" | "approve" | "audit" | "build" | "configure";
+
+export interface WorkspaceAccess {
+  id: string;
+  name: string;
+  role: string;
+  role_label: string;
+  permissions: Permission[];
+}
+
+export interface Me {
+  user_id: string;
+  display_name: string;
+  workspaces: WorkspaceAccess[];
+}
+
+export interface ApprovalItem {
+  id: string;
+  status: string;
+  action_type: string;
+  action_label: string;
+  summary: string;
+  run_id: string;
+  run_state: string;
+  project_id: string;
+  project_title: string;
+  created_at: string;
+  decided_at: string | null;
+}
+
+export interface AuditEntry {
+  id: number;
+  timestamp: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  action: string;
+  target: string;
+  decision: string | null;
+  details: Record<string, unknown>;
+}
+
+export interface AuditPage {
+  items: AuditEntry[];
+  next_before: number | null;
+}
+
+// Reusable factory recipes (task 5.5, apps/api/app/schemas/saved_recipes.py).
+export interface SavedRecipe {
+  id: string;
+  name: string;
+  description: string;
+  project_type: ProjectType;
+  template_id: string | null;
+  request: string;
+  source_run_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  uses: number;
+  last_used_at: string | null;
 }

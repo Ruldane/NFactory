@@ -1,8 +1,8 @@
 import { cn } from "cn";
 
 import { TONE_CLASSES } from "@/components/runs/tone";
-import type { RunStep } from "@/lib/api/types";
-import { formatDuration, formatStepName } from "@/lib/format";
+import type { RunStep, RunTrace } from "@/lib/api/types";
+import { formatCost, formatDuration, formatStepName } from "@/lib/format";
 import { describeStepState } from "@/lib/run-state";
 
 // Steps after which the pipeline loops back through a repair when checks fail.
@@ -15,16 +15,43 @@ function seconds(step: RunStep): number | null {
 
 // The agent graph (spec §9.3 Live Factory): each station of the line with its agent,
 // state, duration and attempts, plus the bounded repair loop after the checks.
-export function AgentGraph({ steps, repairs }: { steps: RunStep[]; repairs: number }) {
-  const lastRepairable = steps.findLast((step) => REPAIRABLE.has(step.name))?.name;
+function callsAndCost(
+  trace: RunTrace | undefined,
+  stepId: string,
+): string | null {
+  const span = trace?.spans.find((s) => s.kind === "step" && s.id === stepId);
+  if (!span?.calls) return null;
+  return `${span.calls} appel${span.calls > 1 ? "s" : ""} · ${formatCost(span.cost_usd ?? null)}`;
+}
+
+export function AgentGraph({
+  steps,
+  repairs,
+  trace,
+}: {
+  steps: RunStep[];
+  repairs: number;
+  trace?: RunTrace;
+}) {
+  const lastRepairable = steps.findLast((step) =>
+    REPAIRABLE.has(step.name),
+  )?.name;
   return (
-    <ol aria-label="Graphe des agents" className="flex flex-wrap items-stretch gap-y-4">
+    <ol
+      aria-label="Graphe des agents"
+      className="flex flex-wrap items-stretch gap-y-4"
+    >
       {steps.map((step, index) => {
         const { tone, glyph, label } = describeStepState(step.state);
         const duration = seconds(step);
         const name = formatStepName(step.name);
+        const spend = callsAndCost(trace, step.id);
         return (
-          <li key={step.id} aria-label={`${name} — ${label}`} className="flex items-center">
+          <li
+            key={step.id}
+            aria-label={`${name} — ${label}`}
+            className="flex items-center"
+          >
             <div
               className={cn(
                 "w-40 border bg-cream px-3 py-2.5",
@@ -46,6 +73,9 @@ export function AgentGraph({ steps, repairs }: { steps: RunStep[]; repairs: numb
                 {duration !== null ? ` · ${formatDuration(duration)}` : ""}
                 {step.attempts > 1 ? ` · ${step.attempts} tentatives` : ""}
               </p>
+              {spend ? (
+                <p className="font-mono text-[11px] text-navy/60">{spend}</p>
+              ) : null}
             </div>
             {step.name === lastRepairable ? (
               <span className="mx-2 border border-dashed border-coral/60 px-2 py-1 font-mono text-[10px] text-coral-deep">

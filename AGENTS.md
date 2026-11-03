@@ -68,6 +68,8 @@ Each project type is one recipe, and the pipeline never changes for a new one.
 - **Language**: comments and docstrings in English. User-facing text in French: UI and API error `message`. API error `code` values stay stable English slugs.
 - **API errors** use the shape `{"error": {"code", "message", "details"}}`, built through `app.errors`.
 - **Workspace scope**: every query is scoped through `RequestContext`. An ID from another workspace returns 404, exactly like a missing one.
+- **Sign-in** (ADR-0013): `NFACTORY_AUTH_MODE=local` (default) has one user and no sign-in; `oidc` (Google) puts every route but `/health*` and `/auth/*` behind `require_session` (router-level, tested) and refuses a change whose `Origin` is not the dashboard's (`csrf_rejected`). New routers go on the guarded `api` router in `app/main.py`, never on `public`.
+- **Permissions**: a route that changes anything takes `CanBuild`, `CanApprove`, `CanConfigure` or `CanAudit` from `app/context.py`, never bare `Context` (ADR-0011). A sensitive action also writes `app/services/audit.record`, with no secret in its details.
 
 ## Commands
 
@@ -78,6 +80,9 @@ Each project type is one recipe, and the pipeline never changes for a new one.
 | Test services | `docker compose up -d --wait postgres redis` |
 | One test folder | `uv run pytest apps/worker/tests/runner -q` |
 | Dashboard | `npm --prefix apps/dashboard test`, `run lint`, `run typecheck` |
+| Evals (37 scenarios, JSON/HTML report in `evals/reports/`) | `./scripts/evals.ps1` (in the sandbox: all cases) or `uv run python -m nfactory_worker.evals` (local: PowerShell cases skip without `pwsh`). Add `--engine demo --engine <kind>:<model>` to compare engines connected in Moteurs IA (`bench-*.html`, ADR-0012); a real engine is billed |
+| E2E (Playwright, stack running in demo mode) | `npm --prefix apps/dashboard run e2e` (first time: `npx --prefix apps/dashboard playwright install chromium`) |
+| Baseline load test (stack running, demo engine only) | `uv run python scripts/load_test.py`; reference figures in `docs/load-baseline.md` |
 | Whole stack + smoke | `./scripts/dev.ps1` (fills missing `.env` secrets, then `docker compose up -d --build`), then `uv run python scripts/smoke_test.py` |
 
 ## Gotchas

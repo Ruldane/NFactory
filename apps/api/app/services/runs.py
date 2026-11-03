@@ -38,10 +38,14 @@ async def launch_run(
     project_id: str,
     data: RunCreate,
     idempotency_key: str | None,
+    *,
+    key_scope: str | None = None,
 ) -> Launched:
+    """`key_scope` replaces the project as the key's scope (a recipe replay makes a new
+    project each time, so its key belongs to the recipe)."""
     async with sessions() as session:
         project = await _owned_project(session, ctx, project_id)
-        key = _scoped_key(project.id, idempotency_key)
+        key = scoped_key(key_scope or project.id, idempotency_key)
         if key is not None:
             existing = await session.scalar(select(Run).where(Run.idempotency_key == key))
             if existing is not None:
@@ -143,7 +147,7 @@ def _buildable_recipe(project: Project) -> RecipeInfo:
     return recipe
 
 
-def _scoped_key(project_id: str, key: str | None) -> str | None:
+def scoped_key(scope: str, key: str | None) -> str | None:
     if key is None:
         return None
     if not 1 <= len(key) <= MAX_IDEMPOTENCY_KEY:
@@ -152,7 +156,7 @@ def _scoped_key(project_id: str, key: str | None) -> str | None:
             "invalid_idempotency_key",
             f"Idempotency-Key doit faire entre 1 et {MAX_IDEMPOTENCY_KEY} caractères.",
         )
-    return f"{project_id}:{key}"
+    return f"{scope}:{key}"
 
 
 async def fail_unqueued(sessions: async_sessionmaker[AsyncSession], run_id: str) -> None:

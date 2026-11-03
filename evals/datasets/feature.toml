@@ -1,0 +1,74 @@
+# Repo feature scenarios (spec §14.2: 6 repo feature). Each adds a feature to a project
+# NFactory delivered first (scenario E: a change request is a child run). The change is
+# rebuilt, tested again, and delivered with modifications.diff.
+# A feature written by Codex on the user's own repository needs the user's account
+# and consent: it is tested by hand, not by these automatic evals.
+
+[[case]]
+id = "feature-departement"
+project_type = "api"
+title = "Annuaire"
+parent_request = "Une API d'annuaire des contacts"
+request = "Ajoute un filtre par département"
+[case.expect]
+fields = ["departement"]
+contains = { "app/models.py" = ["departement"] }
+min_tests = 9
+max_diff_lines = 400
+deliverables = [".zip", ".diff"]
+
+[[case]]
+id = "feature-garantie"
+project_type = "api"
+title = "Inventaire"
+parent_request = "Une API pour l'inventaire du matériel"
+request = "Ajoute le champ garantie"
+[case.expect]
+fields = ["serial_number", "garantie"]
+min_tests = 9
+max_diff_lines = 400
+
+[[case]]
+id = "feature-categorie"
+project_type = "api"
+title = "Tickets"
+parent_request = "Une API de tickets d'incident"
+request = "Ajoute une colonne catégorie et un champ technicien"
+[case.expect]
+fields = ["categorie", "technicien"]
+min_tests = 9
+max_diff_lines = 500
+
+[[case]]
+id = "feature-cout"
+project_type = "api"
+title = "Licences"
+parent_request = "API de suivi des licences logicielles"
+request = "Ajoute le champ coût"
+[case.expect]
+fields = ["cout"]
+min_tests = 9
+max_diff_lines = 400
+
+[[case]]
+id = "feature-webapp-responsable"
+project_type = "webapp"
+title = "Tâches"
+parent_request = "Une application web des tâches de l'équipe"
+request = "Ajoute un champ responsable"
+[case.expect]
+fields = ["responsable"]
+contains = { "frontend/src/entity.json" = ["responsable"] }
+min_tests = 25
+max_diff_lines = 600
+
+[[case]]
+id = "feature-webapp-site"
+project_type = "webapp"
+title = "Parc"
+parent_request = "Une appli web du parc informatique"
+request = "Ajoute le champ site"
+[case.expect]
+fields = ["site"]
+min_tests = 25
+max_diff_lines = 600

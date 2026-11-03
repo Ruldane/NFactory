@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     allow_auto_merge: bool = False
     allow_privileged_execution: bool = False
 
+    # Observability (task 5.2): spans go to this OTLP/HTTP collector when it is set.
+    otel_exporter_otlp_endpoint: str | None = None
+
     # Providers (ADR-0006). Private hosts a custom endpoint may reach (e.g. a vLLM on
     # the LAN); everything else must be a public HTTPS address.
     nfactory_allowed_private_llm_hosts: list[str] = []
@@ -50,6 +53,20 @@ class Settings(BaseSettings):
     # Secrets are never logged: SecretStr hides the value when printed.
     nfactory_session_secret: SecretStr = SecretStr("")
     nfactory_secret_key: SecretStr = SecretStr("")
+
+    # Sign-in (ADR-0013). "local": one user, no sign-in. "oidc": every API route needs a
+    # session opened through the OpenID Connect issuer (Google by default).
+    nfactory_auth_mode: Literal["local", "oidc"] = "local"
+    nfactory_oidc_issuer: str = "https://accounts.google.com"
+    nfactory_oidc_client_id: str = ""
+    nfactory_oidc_client_secret: SecretStr = SecretStr("")
+    # Where the issuer sends the browser back: through the dashboard, so the cookie is its.
+    nfactory_oidc_redirect_url: str = "http://127.0.0.1:3000/api/v1/auth/callback"
+    # Admission is denied unless listed. Comma-separated; domains match Google's "hd".
+    nfactory_oidc_allowed_domains: str = ""
+    nfactory_oidc_allowed_emails: str = ""
+    nfactory_oidc_owner_emails: str = ""
+    nfactory_session_ttl_hours: int = Field(default=12, ge=1, le=720)
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

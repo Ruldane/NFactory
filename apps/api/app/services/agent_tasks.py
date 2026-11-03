@@ -157,6 +157,7 @@ async def publish(
     result = _publication(answer)
     session.add(
         AuditLog(
+            workspace_id=ctx.default_workspace_id,
             actor_id=ctx.user_id,
             action="agent_task.publish",
             target=task_id,

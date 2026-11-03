@@ -4,7 +4,8 @@ Team mode (phase 5) replaces this with real authentication; callers only depend 
 `RequestContext`, so the seam stays the same.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ class RequestContext:
     user_id: str
     workspace_ids: frozenset[str]
     default_workspace_id: str
+    roles: Mapping[str, str] = field(default_factory=dict)  # workspace id -> role
 
 
 async def ensure_local_identity(session: AsyncSession) -> None:
@@ -35,13 +37,21 @@ async def ensure_local_identity(session: AsyncSession) -> None:
 
 
 async def local_context(session: AsyncSession) -> RequestContext:
-    workspace_ids = frozenset(
-        await session.scalars(
-            select(Membership.workspace_id).where(Membership.user_id == LOCAL_USER_ID)
+    return await context_for(session, LOCAL_USER_ID)
+
+
+async def context_for(session: AsyncSession, user_id: str) -> RequestContext:
+    """The user's workspaces and their role in each, from their memberships."""
+    rows = (
+        await session.execute(
+            select(Membership.workspace_id, Membership.role).where(Membership.user_id == user_id)
         )
-    )
+    ).all()
+    roles = {workspace_id: role for workspace_id, role in rows}
+    default = LOCAL_WORKSPACE_ID if LOCAL_WORKSPACE_ID in roles or not roles else min(roles)
     return RequestContext(
-        user_id=LOCAL_USER_ID,
-        workspace_ids=workspace_ids,
-        default_workspace_id=LOCAL_WORKSPACE_ID,
+        user_id=user_id,
+        workspace_ids=frozenset(roles),
+        default_workspace_id=default,
+        roles=roles,
     )

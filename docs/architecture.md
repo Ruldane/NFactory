@@ -43,6 +43,14 @@ dashboard ◀─SSE /runs/{id}/events (Last-Event-ID = seq)─ api ◀─ table 
 
 Le flux SSE relit la table dès que le worker signale un événement sur Redis, et la relit de toute façon toutes les 2 s ; sans Redis, il la relit toutes les 0,5 s. Chaque run reçoit au lancement un `trace_id` et un budget (`max_llm_calls`, `max_agent_steps`, `max_repair_attempts`) que le worker applique.
 
+Traces (tâche 5.2, ADR-0009) : `GET /runs/{id}/trace` reconstruit depuis la base l'arbre run → étapes → appels d'agent et vérifications, avec durée, jetons et coût ; le dashboard l'affiche en cascade (« Trace du run »). Si `NFACTORY_OTLP_ENDPOINT` est fixé, le worker exporte aussi ces spans en OTLP/HTTP sous le `trace_id` du run, par exemple vers Jaeger (`docker compose --profile telemetry up`, interface sur `127.0.0.1:16686`).
+
+Connexion (tâche 6.1, ADR-0013) : en mode `local` (défaut), un seul utilisateur, sans connexion. En mode `oidc`, le dashboard envoie le navigateur chez Google (`/auth/login`, flux Authorization Code + PKCE conduit par l'API) ; au retour (`/auth/callback`, par le dashboard), l'API vérifie le jeton d'identité, applique la règle d'admission (domaine Workspace `hd` ou e-mail listé, refus par défaut) et pose un cookie de session `HttpOnly`, `SameSite=Lax`, dont seule l'empreinte est en base (`auth_sessions`). Toute route sauf `/health*` et `/auth/*` exige alors une session ; une modification doit venir de l'origine du dashboard.
+
+Droits et audit (tâche 5.4, ADR-0011) : chaque route qui modifie quelque chose déclare sa permission (`CanBuild`, `CanApprove`, `CanConfigure`, `CanAudit`), tirée du rôle de l'appelant dans l'espace de travail ; un rôle insuffisant reçoit 403 `forbidden`. Les actions sensibles (annulation, décisions, réglages, moteurs, routage, appairage, publication) écrivent une entrée expurgée dans `audit_log`, rattachée à l'espace. `GET /me`, `GET /approvals` et `GET /audit` alimentent la page « Approbations & audit » du dashboard.
+
+Recettes (tâche 5.5, ADR-0012) : un run livré s'enregistre comme recette de l'espace de travail (`/saved-recipes`) ; la relancer crée un nouveau projet et lance un run par le chemin habituel (`launch_run`), avec les moteurs et les limites du moment.
+
 Pendant un run, le worker tient un bail Redis (`nfactory:run-lease:<id>`, 30 s, renouvelé). Au démarrage du worker et chaque minute, un run `RUNNING` sans bail vivant est libéré du verrou ARQ et reprend à son dernier checkpoint : un worker tué ne bloque pas son run pendant le délai maximal du job.
 
 Les limites d'un run (`max_llm_calls`, `max_agent_steps`, `max_repair_attempts`) viennent des réglages de l'espace de travail (`GET/PUT /settings`, stockés dans `workspaces.data_policy`), à défaut des variables d'environnement.
@@ -110,3 +118,7 @@ Format unique : `{"error": {"code", "message", "details"}}`. `code` est stable e
 | Intégration | `apps/api/tests`, `apps/worker/tests/jobs`, `apps/worker/tests/pipeline/test_resume.py` (base jetable par test) | oui |
 | Dashboard | `apps/dashboard/**/*.test.ts(x)` (Vitest + Testing Library) | non (fetch simulé) |
 | Bout en bout | `scripts/smoke_test.py` sur la stack lancée (dont un vrai run Excel) | oui |
+| E2E navigateur (tâche 5.6) | `apps/dashboard/e2e/*.e2e.ts` (Playwright, Chromium) sur la stack lancée en mode démo : besoin → run → classeur téléchargé, recette enregistrée puis relancée, limites auditées, centre d'approbation | oui |
+| Charge de base (tâche 5.6) | `scripts/load_test.py` : lectures concurrentes et runs démo simultanés ; refuse si un moteur réel est routé ; référence dans `docs/load-baseline.md` | oui (moteur démo) |
+| Évals (ADR-0010) | `evals/datasets/*.toml` (37 scénarios), `scripts/evals.ps1` dans le sandbox ou `uv run python -m nfactory_worker.evals` en local ; rapport JSON/HTML dans `evals/reports/` | non (pipeline réel, moteur démo) |
+| Comparaison des moteurs (ADR-0012) | mêmes cas avec `--engine demo --engine <fournisseur>:<modèle>` ; un moteur réel doit être connecté dans Moteurs IA ; rapport `bench-*.json/.html` | oui, si un moteur réel est nommé (facturé) |

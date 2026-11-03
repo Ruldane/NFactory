@@ -211,3 +211,38 @@ async def test_a_child_run_starts_from_its_parents_delivered_brief(
     async with sessions() as session:
         names = await session.scalars(select(Artifact.filename).where(Artifact.run_id == child_id))
         assert "modifications.diff" in list(names)
+
+
+async def test_a_traced_run_exports_spans_under_its_trace_id(
+    sessions: Sessions, tmp_path: Path
+) -> None:
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    trace_id = "fedcba9876543210fedcba9876543210"
+    run_id = await new_run(sessions, "excel", "Suivi des heures", trace_id=trace_id)
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    settings = settings_for(tmp_path)
+
+    await process_run(
+        run_id,
+        sessions=sessions,
+        settings=settings,
+        runner=LocalRunner(Path(settings.workspace_root), python=sys.executable),
+        tracer=provider.get_tracer("test"),
+    )
+
+    _, steps, _ = await load(sessions, run_id)
+    spans = exporter.get_finished_spans()
+    assert {format(s.context.trace_id, "032x") for s in spans} == {trace_id}
+    run_span = next(s for s in spans if s.name == "run")
+    assert run_span.attributes["nfactory.outcome"] == "COMPLETED"
+    # One span per step of the run, as stored: the graph and the trace agree.
+    assert {s.name for s in spans if s.name.startswith("step ")} == {
+        f"step {s.name}" for s in steps
+    }
+    assert any(s.name.startswith("agent ") for s in spans)
+    assert any(s.name.startswith("check ") for s in spans)

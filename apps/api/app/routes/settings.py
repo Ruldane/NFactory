@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-from app.context import AppSettings, Context, Session
+from app.context import AppSettings, CanConfigure, Context, Session
 from app.schemas.settings import RunLimits, SettingsOut
-from app.services import workspace_settings
+from app.services import audit, workspace_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -14,7 +14,11 @@ async def get_settings(session: Session, ctx: Context, settings: AppSettings) ->
 
 @router.put("/run-limits")
 async def put_run_limits(
-    limits: RunLimits, session: Session, ctx: Context, settings: AppSettings
+    limits: RunLimits, session: Session, ctx: CanConfigure, settings: AppSettings
 ) -> SettingsOut:
     """Limits for new runs; a run keeps the limits it was launched with."""
-    return await workspace_settings.save_run_limits(session, ctx, settings, limits)
+    view = await workspace_settings.save_run_limits(session, ctx, settings, limits)
+    details = limits.model_dump()
+    audit.record(session, ctx, "settings.run_limits", ctx.default_workspace_id, details=details)
+    await session.commit()
+    return view

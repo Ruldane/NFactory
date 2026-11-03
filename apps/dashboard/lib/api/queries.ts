@@ -16,6 +16,7 @@ import type {
   ProjectType,
   Recipe,
   RunDetail,
+  RunTrace,
   RunLimits,
   WorkspaceSettings,
 } from "@/lib/api/types";
@@ -67,6 +68,14 @@ export function useRecipes() {
     queryKey: ["recipes"],
     queryFn: () => apiGet<Items<Recipe>>("/recipes"),
     staleTime: Infinity,
+  });
+}
+
+export function useRunTrace(runId: string, active: boolean) {
+  return useQuery({
+    queryKey: [...runKeys.detail(runId), "trace"],
+    queryFn: () => apiGet<RunTrace>(`/runs/${runId}/trace`),
+    refetchInterval: active ? ACTIVE_RUN_REFRESH_MS : false,
   });
 }
 

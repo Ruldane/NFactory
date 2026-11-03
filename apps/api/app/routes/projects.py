@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
-from app.context import Context, Session
+from app.context import CanBuild, Context, Session
 from app.schemas.common import Page
 from app.schemas.projects import (
     ProjectCreate,
@@ -28,7 +28,7 @@ async def list_projects(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_project(session: Session, ctx: Context, data: ProjectCreate) -> ProjectOut:
+async def create_project(session: Session, ctx: CanBuild, data: ProjectCreate) -> ProjectOut:
     return await projects.create_project(session, ctx, data)
 
 
@@ -39,6 +39,6 @@ async def get_project(session: Session, ctx: Context, project_id: str) -> Projec
 
 @router.patch("/{project_id}")
 async def update_project(
-    session: Session, ctx: Context, project_id: str, data: ProjectUpdate
+    session: Session, ctx: CanBuild, project_id: str, data: ProjectUpdate
 ) -> ProjectOut:
     return await projects.update_project(session, ctx, project_id, data)

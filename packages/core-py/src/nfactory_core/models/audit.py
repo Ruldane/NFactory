@@ -12,6 +12,8 @@ from nfactory_core.models.base import Base, created_column
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    # No foreign key: the trail outlives what it describes. Reads are scoped by it.
+    workspace_id: Mapped[str | None] = mapped_column(String(32), index=True)
     actor_id: Mapped[str | None] = mapped_column(String(32))
     action: Mapped[str] = mapped_column(String(80))
     target: Mapped[str] = mapped_column(String(200))

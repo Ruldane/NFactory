@@ -1,0 +1,85 @@
+# Excel scenarios (spec §14.2: 8 Excel). The deliverable is a real .xlsx built by a
+# script the checks run, with formula tests.
+
+[[case]]
+id = "excel-heures"
+project_type = "excel"
+title = "Suivi des heures"
+request = "Un classeur de suivi des heures par semaine et par équipe."
+tags = ["kpi"]
+[case.expect]
+files = ["build_report.py", "tests/test_report.py"]
+min_tests = 7
+deliverables = [".xlsx", ".zip"]
+
+[[case]]
+id = "excel-budget"
+project_type = "excel"
+title = "Budget informatique"
+request = "Un tableau du budget informatique : prévu, engagé et écart par poste."
+tags = ["finance"]
+[case.expect]
+contains = { "build_report.py" = ["Budget informatique"] }
+min_tests = 7
+deliverables = [".xlsx"]
+
+[[case]]
+id = "excel-ventes"
+project_type = "excel"
+title = "Ventes mensuelles"
+request = "Un classeur des ventes mensuelles avec un graphique et un total annuel."
+tags = ["kpi", "chart"]
+[case.expect]
+min_tests = 7
+deliverables = [".xlsx"]
+
+[[case]]
+id = "excel-stocks"
+project_type = "excel"
+title = "État des stocks"
+request = "Un état des stocks de consommables avec seuil d'alerte."
+tags = ["stock"]
+[case.expect]
+min_tests = 7
+deliverables = [".xlsx"]
+
+[[case]]
+id = "excel-absences"
+project_type = "excel"
+title = "Absences de l'équipe"
+request = "Un tableau des absences de l'équipe par mois."
+tags = ["rh"]
+[case.expect]
+min_tests = 7
+deliverables = [".xlsx"]
+
+[[case]]
+id = "excel-support"
+project_type = "excel"
+title = "KPI du support"
+request = "Les indicateurs du support : tickets ouverts, fermés et délai moyen de résolution."
+tags = ["kpi", "support"]
+[case.expect]
+min_tests = 7
+deliverables = [".xlsx"]
+
+[[case]]
+id = "excel-inventaire"
+project_type = "excel"
+title = "Inventaire des postes"
+request = "Un inventaire des postes de travail par site, exportable en Excel."
+tags = ["it"]
+[case.expect]
+min_tests = 7
+deliverables = [".xlsx"]
+
+[[case]]
+id = "excel-formations"
+project_type = "excel"
+title = "Plan de formation"
+request = "Un plan de formation : sessions, participants et coût total."
+tags = ["rh", "finance"]
+[case.expect]
+contains = { "README.md" = ["Plan de formation"] }
+min_tests = 7
+deliverables = [".xlsx"]

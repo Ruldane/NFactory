@@ -1,0 +1,126 @@
+# Web and API scenarios (spec §14.2: 10 web/API). Each case is a user request plus what
+# a correct delivery must show. The demo engine picks the entity from known IT domains.
+
+[[case]]
+id = "api-inventaire"
+project_type = "api"
+title = "Inventaire du matériel"
+request = "Une API pour l'inventaire du matériel informatique : numéro de série, emplacement, date d'achat."
+tags = ["crud", "it"]
+[case.expect]
+entity = "equipement"
+fields = ["serial_number", "location", "purchased_on"]
+files = ["app/models.py", "README.md"]
+contains = { "app/models.py" = ["serial_number"] }
+min_tests = 9
+deliverables = [".zip"]
+forbidden_calls = ["os.system", "eval", "exec"]
+
+[[case]]
+id = "api-licences"
+project_type = "api"
+title = "Licences logicielles"
+request = "API de suivi des licences logicielles avec éditeur, nombre de postes et date d'expiration."
+tags = ["crud", "it"]
+[case.expect]
+entity = "licence"
+fields = ["vendor", "seats", "expires_on"]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "api-tickets"
+project_type = "api"
+title = "Tickets du support"
+request = "Une API de tickets d'incident avec une priorité et un statut résolu."
+tags = ["crud", "support"]
+[case.expect]
+entity = "ticket"
+fields = ["priority", "resolved"]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "api-clients"
+project_type = "api"
+title = "Annuaire clients"
+request = "API d'annuaire des clients : nom, e-mail et ville."
+tags = ["crud"]
+[case.expect]
+entity = "client"
+fields = ["email", "city"]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "api-taches"
+project_type = "api"
+title = "Tâches de l'équipe"
+request = "Une API to-do pour les tâches de l'équipe, avec une échéance."
+tags = ["crud"]
+[case.expect]
+entity = "tache"
+fields = ["done", "due_on"]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "api-generique"
+project_type = "api"
+title = "Recettes de cuisine"
+request = "Une API pour ranger des recettes de cuisine."
+tags = ["crud", "unknown-domain"]
+[case.expect]
+entity = "item"
+fields = ["name", "description"]
+min_tests = 9
+deliverables = [".zip"]
+
+[[case]]
+id = "webapp-licences"
+project_type = "webapp"
+title = "Gestion des licences"
+request = "Une application web pour gérer les licences logicielles de l'entreprise."
+tags = ["web", "it"]
+[case.expect]
+entity = "licence"
+fields = ["seats"]
+contains = { "frontend/src/entity.json" = ["seats", "expires_on"] }
+min_tests = 25
+deliverables = [".zip"]
+
+[[case]]
+id = "webapp-parc"
+project_type = "webapp"
+title = "Parc informatique"
+request = "Une appli web du parc informatique : équipements, emplacement et numéro de série."
+tags = ["web", "it"]
+[case.expect]
+entity = "equipement"
+contains = { "frontend/src/entity.json" = ["serial_number"] }
+min_tests = 25
+deliverables = [".zip"]
+
+[[case]]
+id = "webapp-tickets"
+project_type = "webapp"
+title = "Suivi des incidents"
+request = "Une application web de suivi des incidents avec priorité."
+tags = ["web", "support"]
+[case.expect]
+entity = "ticket"
+contains = { "frontend/src/entity.json" = ["priority"] }
+min_tests = 25
+deliverables = [".zip"]
+
+[[case]]
+id = "webapp-clients"
+project_type = "webapp"
+title = "Carnet de contacts"
+request = "Une application web pour le carnet de contacts des clients."
+tags = ["web"]
+[case.expect]
+entity = "client"
+contains = { "frontend/src/entity.json" = ["email"] }
+min_tests = 25
+deliverables = [".zip"]
