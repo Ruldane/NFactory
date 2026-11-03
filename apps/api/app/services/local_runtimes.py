@@ -31,6 +31,7 @@ from nfactory_core.models import ProviderConnection
 from nfactory_core.secrets import SecretStore, SecretUnreadableError
 
 _TIMEOUT_S = 30.0  # detection runs a few official commands on the user's machine
+_PUBLISH_TIMEOUT_S = 120.0  # commit, push and a draft PR through gh
 START_HINT = (
     "Pont local non joignable : lancez ./scripts/bridge.ps1 (ou scripts/bridge.sh) "
     "sur cet ordinateur."
@@ -69,6 +70,8 @@ class BridgeClient(Protocol):
     async def repos(self, token: str) -> list[dict[str, Any]]: ...
     async def start_task(self, token: str, body: dict[str, Any]) -> dict[str, Any]: ...
     async def task(self, token: str, task_id: str, action: str | None = None) -> dict[str, Any]: ...
+    async def publish(self, token: str, task_id: str, body: dict[str, Any]) -> dict[str, Any]: ...
+    async def publication(self, token: str, task_id: str) -> dict[str, Any]: ...
 
 
 class HttpBridge:
@@ -110,6 +113,23 @@ class HttpBridge:
         answer = await self._call(method, path, token=token, refusals=True)
         return answer if isinstance(answer, dict) else {}
 
+    async def publish(self, token: str, task_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        answer = await self._call(
+            "POST",
+            f"/tasks/{task_id}/publish",
+            token=token,
+            json=body,
+            refusals=True,
+            wait_s=_PUBLISH_TIMEOUT_S,
+        )
+        return answer if isinstance(answer, dict) else {}
+
+    async def publication(self, token: str, task_id: str) -> dict[str, Any]:
+        answer = await self._call(
+            "GET", f"/tasks/{task_id}/publication", token=token, refusals=True, wait_s=60.0
+        )
+        return answer if isinstance(answer, dict) else {}
+
     async def _call(
         self,
         method: str,
@@ -118,10 +138,11 @@ class HttpBridge:
         token: str | None = None,
         json: Any = None,
         refusals: bool = False,
+        wait_s: float = _TIMEOUT_S,
     ) -> Any:
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT_S) as http:
+            async with httpx.AsyncClient(timeout=wait_s) as http:
                 response = await http.request(
                     method, f"{self._base}{path}", headers=headers, json=json
                 )

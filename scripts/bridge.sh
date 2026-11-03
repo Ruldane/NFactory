@@ -4,6 +4,7 @@
 # in the dashboard (Moteurs IA, Outils locaux). Stop it with Ctrl+C.
 # Repositories NFactory may work on, then exit: --allow <folder>, --revoke <id>, --repos.
 # --handoff <task-id>: print how to run Claude Code yourself on a handoff, then exit.
+# --allow-push <id>: allow draft PRs to the GitHub repository of that repository's origin.
 set -eu
 if [ "${1:-}" = "--allow" ] && [ -n "${2:-}" ]; then
   # Resolve before changing folder: a relative path means the caller's folder.

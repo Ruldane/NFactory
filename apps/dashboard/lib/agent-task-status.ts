@@ -98,3 +98,16 @@ export function describeAgentEvent(event: AgentEvent): EventLine {
       return { glyph: "✗", label: "Erreur", text: event.message ?? "" };
   }
 }
+
+const PUBLICATION_FACTS = [
+  { key: "local_commit_created", label: "Commit local créé" },
+  { key: "pushed", label: "Branche poussée sur GitHub" },
+  { key: "pr_created", label: "PR brouillon ouverte" },
+  { key: "merged", label: "Fusionnée par un humain" },
+] as const;
+
+// The four publication facts in order; each is done up to the state GitHub confirmed.
+export function publicationFacts(state: string | null) {
+  const reached = PUBLICATION_FACTS.findIndex((fact) => fact.key === state);
+  return PUBLICATION_FACTS.map((fact, index) => ({ ...fact, done: index <= reached }));
+}

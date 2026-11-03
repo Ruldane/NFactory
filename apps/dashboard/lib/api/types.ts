@@ -39,7 +39,45 @@ export interface RunCounts {
   cancelled: number;
 }
 
+export interface OverviewFilters {
+  days: number | null;
+  project_type: string | null;
+}
+
+// Metrics of spec §14.1; null means "nothing to measure", never a fake zero.
+export interface FactoryMetrics {
+  end_to_end_delivery_rate: number | null;
+  first_pass_test_rate: number | null;
+  repair_success_rate: number | null;
+  time_to_preview_seconds: number | null;
+  time_to_draft_pr_seconds: number | null;
+  human_intervention_count: number;
+  cost_per_successful_delivery: number | null;
+  critical_policy_violation_count: number;
+}
+
+export interface CallMetrics {
+  calls: number;
+  failures: number;
+  latency_p50_s: number | null;
+  latency_p95_s: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: number | null;
+  cost_complete: boolean;
+}
+
+export interface ProviderMetric extends CallMetrics {
+  provider: string;
+  model: string;
+}
+
+export interface AgentMetric extends CallMetrics {
+  agent: string;
+}
+
 export interface DashboardSummary {
+  filters: OverviewFilters;
   demo_data: boolean;
   projects: number;
   runs: RunCounts;
@@ -48,6 +86,9 @@ export interface DashboardSummary {
   cost_estimate_usd: number | null;
   approvals_pending: number;
   recent_runs: RecentRun[];
+  metrics: FactoryMetrics;
+  providers: ProviderMetric[];
+  agents: AgentMetric[];
 }
 
 // Project types come from the recipe catalog (GET /recipes), so any string is possible.
@@ -357,6 +398,19 @@ export type AgentRuntime = "codex" | "claude";
 export interface LocalRepo {
   id: string;
   name: string;
+  github?: string | null; // the GitHub repository the user allowed pushes to
+}
+
+// Publication facts, each read back from git and GitHub by the bridge (task 4.6).
+export type PublicationState = "local_commit_created" | "pushed" | "pr_created" | "merged";
+
+export interface Publication {
+  repo: string;
+  commit: string;
+  state: PublicationState | null;
+  pushed: boolean;
+  pr: { number: number; url: string; state: string; draft: boolean; head: string; merged: boolean } | null;
+  verified_at: number;
 }
 
 export type AgentTaskStatus =
@@ -393,6 +447,7 @@ export interface AgentTask {
   diff_truncated: boolean;
   error: string;
   created_at: number;
+  publication?: Publication | null;
 }
 
 // A sandbox check of a task's change (task 4.4): the verdict comes from the JUnit report.

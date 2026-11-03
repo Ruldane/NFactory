@@ -4,6 +4,8 @@ import {
   formatBytes,
   formatCost,
   formatDuration,
+  formatLatency,
+  formatTokens,
   formatPercent,
   formatStepName,
 } from "@/lib/format";
@@ -67,5 +69,20 @@ describe("formatBytes", () => {
     expect(plain(formatBytes(512))).toBe("512 o");
     expect(plain(formatBytes(13_828))).toBe("13,5 Ko");
     expect(plain(formatBytes(2_500_000))).toBe("2,4 Mo");
+  });
+});
+
+describe("formatLatency", () => {
+  it("never rounds a measured latency down to zero", () => {
+    expect(formatLatency(2.94)).toBe("2,9 s");
+    expect(formatLatency(0.0001)).toBe("< 0,1 s");
+    expect(formatLatency(null)).toBe("Non mesuré");
+  });
+});
+
+describe("formatTokens", () => {
+  it("shows unknown token counts as unknown", () => {
+    expect(formatTokens(300, 60)).toBe("300 / 60");
+    expect(formatTokens(null, null)).toBe("Non mesuré");
   });
 });

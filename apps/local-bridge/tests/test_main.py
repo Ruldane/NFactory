@@ -1,5 +1,6 @@
 """Starting the bridge: loopback port, store in the user's profile, a code when needed."""
 
+import subprocess
 from pathlib import Path
 
 from nfactory_bridge.__main__ import DEFAULT_PORT, start
@@ -112,3 +113,30 @@ def test_handoff_prints_how_to_run_claude_and_never_runs_it(tmp_path: Path) -> N
     assert any(str(task_dir) in line for line in lines)
     assert any("claude" in line for line in lines)
     assert "Relais inconnu" in lines[-1]
+
+
+def test_allow_push_names_the_github_repository(tmp_path: Path) -> None:
+    from nfactory_bridge.__main__ import manage
+
+    store = tmp_path / "profile" / "bridge.json"
+    repo = git_repo(tmp_path / "nfactory-test")
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/Ruldane/nfactory-test.git",
+        ],
+        check=True,
+    )
+    lines: list[str] = []
+
+    manage(["--store", str(store), "--allow", str(repo)], lines.append)
+    assert manage(["--store", str(store), "--allow-push", "nfactory-test"], lines.append)
+    manage(["--store", str(store), "--allow-push", "unknown"], lines.append)
+
+    assert any("Ruldane/nfactory-test" in line for line in lines)
+    assert lines[-1].startswith("Refusé")

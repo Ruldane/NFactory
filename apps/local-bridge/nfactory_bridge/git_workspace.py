@@ -6,8 +6,8 @@ edits). Every write by NFactory is staged at once, so the index records what NFa
 wrote: a file whose working copy differs from the index, or an untracked file in the
 way, was changed by someone else and is never overwritten (Conflict, nothing written).
 
-Interface: prepare, apply_files, adopt, manifest, diff, tracked_files, commit, rollback;
-check_repo_root; Worktree; GitRefused,
+Interface: prepare, apply_files, adopt, manifest, diff, tracked_files, commit, push,
+head, remote_url, rollback, check_repo_root; Worktree; GitRefused,
 Conflict. Every git call is a fixed argv; names and paths are checked before use.
 """
 
@@ -156,6 +156,26 @@ def commit(work: Worktree, message: str) -> str:
     _git(work.path, "add", "--all")
     _git(work.path, *_AUTHOR, "commit", "--quiet", "-m", message[:2000])
     return _git(work.path, "rev-parse", "HEAD").strip()
+
+
+def head(work: Worktree) -> str:
+    return _git(work.path, "rev-parse", "HEAD").strip()
+
+
+def push(work: Worktree, remote: str = "origin") -> None:
+    """Push the run's branch to the same branch name on the remote. Never forced, never
+    another branch: a branch that diverged on the remote makes git refuse."""
+    if not work.branch.startswith(BRANCH_PREFIX):
+        raise GitRefused("Seule une branche nfactory/… peut être poussée.")
+    ref = f"refs/heads/{work.branch}"
+    _git(work.path, "push", "--quiet", remote, f"{ref}:{ref}")
+
+
+def remote_url(repo: Path, remote: str = "origin") -> str | None:
+    try:
+        return _git(repo, "remote", "get-url", remote).strip() or None
+    except GitRefused:
+        return None
 
 
 def rollback(repo: Path, work: Worktree) -> None:

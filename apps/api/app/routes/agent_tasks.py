@@ -8,9 +8,11 @@ from app.context import Bridge, Context, Providers, Queue, Session
 from app.schemas.agent_tasks import (
     TASK_ID,
     AgentCheckOut,
+    AgentPublishIn,
     AgentTaskIn,
     AgentTaskOut,
     LocalReposOut,
+    Publication,
 )
 from app.services import agent_tasks
 
@@ -82,3 +84,24 @@ async def check_task(
 @router.get("/checks/{check_id}")
 async def get_check(check_id: CheckId, session: Session, ctx: Context) -> AgentCheckOut:
     return await agent_tasks.get_check(session, ctx, check_id)
+
+
+@router.post("/tasks/{task_id}/publish")
+async def publish_task(
+    task_id: TaskId,
+    data: AgentPublishIn,
+    session: Session,
+    ctx: Context,
+    bridge: Bridge,
+    deps: Providers,
+) -> Publication:
+    """After the user's approval: local commit, push of the task's branch, draft PR."""
+    return await agent_tasks.publish(session, ctx, bridge, deps.store, task_id, data)
+
+
+@router.get("/tasks/{task_id}/publication")
+async def get_publication(
+    task_id: TaskId, session: Session, ctx: Context, bridge: Bridge, deps: Providers
+) -> Publication:
+    """Each publication fact, verified again on GitHub."""
+    return await agent_tasks.publication(session, ctx, bridge, deps.store, task_id)

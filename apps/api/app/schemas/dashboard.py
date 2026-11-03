@@ -32,7 +32,46 @@ class RecentRun(BaseModel):
     steps: list[StepBrief]  # ordered by position
 
 
+class Filters(BaseModel):
+    days: int | None
+    project_type: str | None
+
+
+class FactoryMetrics(BaseModel):
+    """NFactory metrics of spec §14.1. None: nothing to measure (yet), never a fake 0."""
+
+    end_to_end_delivery_rate: float | None
+    first_pass_test_rate: float | None
+    repair_success_rate: float | None
+    time_to_preview_seconds: float | None
+    time_to_draft_pr_seconds: float | None
+    human_intervention_count: int
+    cost_per_successful_delivery: float | None
+    critical_policy_violation_count: int
+
+
+class CallMetrics(BaseModel):
+    calls: int
+    failures: int
+    latency_p50_s: float | None
+    latency_p95_s: float | None
+    input_tokens: int | None  # None: no call reported a count
+    output_tokens: int | None
+    cost_usd: float | None
+    cost_complete: bool  # every call had a known price
+
+
+class ProviderMetric(CallMetrics):
+    provider: str
+    model: str
+
+
+class AgentMetric(CallMetrics):
+    agent: str
+
+
 class DashboardSummary(BaseModel):
+    filters: Filters
     demo_data: bool
     projects: int
     runs: RunCounts
@@ -42,3 +81,6 @@ class DashboardSummary(BaseModel):
     cost_estimate_usd: float | None
     approvals_pending: int
     recent_runs: list[RecentRun]
+    metrics: FactoryMetrics
+    providers: list[ProviderMetric]
+    agents: list[AgentMetric]

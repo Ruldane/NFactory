@@ -248,3 +248,85 @@ describe("AgentTasks", () => {
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/checks") && init?.method === "POST")).toBe(true);
   });
 });
+
+const PUBLICATION = {
+  repo: "Ruldane/nfactory-test",
+  commit: "c".repeat(40),
+  state: "pr_created",
+  pushed: true,
+  pr: {
+    number: 1,
+    url: "https://github.com/Ruldane/nfactory-test/pull/1",
+    state: "OPEN",
+    draft: true,
+    head: "c".repeat(40),
+    merged: false,
+  },
+  verified_at: 1_800_000_100,
+};
+
+const pushable = () =>
+  json({ repos: [{ id: "nfactory-test", name: "nfactory-test", github: "Ruldane/nfactory-test" }] });
+
+async function launchDone() {
+  await userEvent.type(await screen.findByLabelText("Tâche pour l'agent"), "x");
+  await userEvent.click(screen.getByRole("checkbox", { name: /J'autorise Codex/ }));
+  await userEvent.click(screen.getByRole("button", { name: "Lancer Codex" }));
+  return within(await screen.findByRole("region", { name: "Publication sur GitHub" }));
+}
+
+describe("GitHub publication", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("explains how to allow publishing when the repository has no push permission", async () => {
+    serve((path, init) => {
+      if (path.endsWith("/local-runtimes/repos")) return repos();
+      if (path.endsWith("/local-runtimes/tasks") && init?.method === "POST") return json(DONE, 202);
+      if (path.endsWith(`/tasks/${DONE.id}`)) return json(DONE);
+      return undefined;
+    });
+    renderTasks();
+
+    const panel = await launchDone();
+
+    expect(panel.getByText("./scripts/bridge.ps1 -AllowPush nfactory-test")).toBeVisible();
+    expect(panel.queryByRole("button", { name: /Pousser/ })).toBeNull();
+  });
+
+  it("pushes only after its own approval, then shows the facts read from GitHub", async () => {
+    const fetchMock = serve((path, init) => {
+      if (path.endsWith("/local-runtimes/repos")) return pushable();
+      if (path.endsWith("/local-runtimes/tasks") && init?.method === "POST") return json(DONE, 202);
+      if (path.endsWith(`/tasks/${DONE.id}/publish`) && init?.method === "POST") return json(PUBLICATION);
+      if (path.endsWith(`/tasks/${DONE.id}/publication`)) {
+        return json({ ...PUBLICATION, state: "merged", pr: { ...PUBLICATION.pr, merged: true } });
+      }
+      if (path.endsWith(`/tasks/${DONE.id}`)) return json(DONE);
+      return undefined;
+    });
+    renderTasks();
+    const panel = await launchDone();
+    const push = panel.getByRole("button", { name: "Pousser et ouvrir la PR brouillon" });
+
+    expect(panel.getByText(/github\.com\/Ruldane\/nfactory-test/)).toBeVisible();
+    await userEvent.type(panel.getByLabelText("Titre de la PR"), "Ajoute multiply");
+    expect(push).toBeDisabled();
+    await userEvent.click(panel.getByRole("checkbox", { name: /J'approuve/ }));
+    await userEvent.click(push);
+
+    const facts = await panel.findByRole("list", { name: "Statut de la publication" });
+    expect(within(facts).getByText("PR brouillon ouverte").closest("li")).toHaveAttribute("data-done", "true");
+    expect(within(facts).getByText("Fusionnée par un humain").closest("li")).toHaveAttribute("data-done", "false");
+    expect(panel.getByRole("link", { name: /PR #1/ })).toHaveAttribute(
+      "href",
+      "https://github.com/Ruldane/nfactory-test/pull/1",
+    );
+    const sent = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/publish"));
+    expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ approve: true, title: "Ajoute multiply" });
+
+    await userEvent.click(panel.getByRole("button", { name: "Vérifier sur GitHub" }));
+    expect(
+      await within(facts).findByText("Fusionnée par un humain").then((node) => node.closest("li")),
+    ).toHaveAttribute("data-done", "true");
+  });
+});

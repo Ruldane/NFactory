@@ -22,6 +22,7 @@ class FakeTasks:
         self.started: list[tuple[str, str]] = []
         self.cancelled: list[str] = []
         self.discarded: list[str] = []
+        self.published: list[tuple[str, str, str]] = []
 
     def start_codex(self, repo_id: str, task: str) -> dict[str, Any]:
         if repo_id == "busy":
@@ -48,6 +49,13 @@ class FakeTasks:
 
     def collect(self, task_id: str) -> dict[str, Any]:
         return {**VIEW, "runtime": "claude", "status": "succeeded"}
+
+    def publish(self, task_id: str, title: str, body: str) -> dict[str, Any]:
+        self.published.append((task_id, title, body))
+        return {"state": "pr_created"}
+
+    def publication(self, task_id: str) -> dict[str, Any]:
+        return {"state": "pushed"}
 
     def snapshot(self, task_id: str) -> dict[str, Any]:
         return {"id": task_id, "files": [{"path": "calc.py", "data": "eA=="}]}
@@ -189,3 +197,25 @@ def test_a_handoff_is_collected_then_its_files_are_read(client: Client) -> None:
     assert snapshot["files"] == [{"path": "calc.py", "data": "eA=="}]
     assert client.call("GET", "/tasks/t_1/snapshot", token=None)[0] == 401
     assert client.call("POST", "/tasks/t_1/snapshot")[0] == 405
+
+
+@pytest.mark.parametrize("approve", [None, False, "true"])
+def test_publishing_needs_the_users_approval(
+    client: Client, tasks: FakeTasks, approve: Any
+) -> None:
+    body = {"approve": approve, "title": "Ajoute divide", "body": "corps"}
+
+    status, error = client.call("POST", "/tasks/t_1/publish", body)
+
+    assert status == 403
+    assert error["error"]["code"] == "approval_required"
+    assert tasks.published == []
+
+
+def test_an_approved_publish_runs_and_its_status_is_read(client: Client, tasks: FakeTasks) -> None:
+    body = {"approve": True, "title": "Ajoute divide", "body": "Tests : 4 réussis"}
+
+    assert client.call("POST", "/tasks/t_1/publish", body) == (200, {"state": "pr_created"})
+    assert client.call("GET", "/tasks/t_1/publication") == (200, {"state": "pushed"})
+    assert tasks.published == [("t_1", "Ajoute divide", "Tests : 4 réussis")]
+    assert client.call("POST", "/tasks/t_1/publish", body, token=None)[0] == 401

@@ -1,20 +1,28 @@
-"""Overview KPIs (spec §9.3), computed from the database for the caller's workspaces."""
+"""Overview KPIs (spec §9.3, §14.1), computed from the database for the caller's
+workspaces, then for the chosen period and project type."""
 
 from sqlalchemy import ColumnElement, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.schemas.dashboard import DashboardSummary, RecentRun, RunCounts, StepBrief
+from app.schemas.dashboard import DashboardSummary, Filters, RecentRun, RunCounts, StepBrief
 from app.services.identity import RequestContext
+from app.services.metrics import RunScope, agent_metrics, factory_metrics, provider_metrics
 from nfactory_core.models import Approval, Project, Run
 from nfactory_core.states import TERMINAL_STATES, RunState
 
 RECENT_RUNS_LIMIT = 5
 
 
-async def build_summary(session: AsyncSession, ctx: RequestContext) -> DashboardSummary:
-    project_in_scope = Project.workspace_id.in_(ctx.workspace_ids)
-    run_in_scope = Run.project_id.in_(select(Project.id).where(project_in_scope))
+async def build_summary(
+    session: AsyncSession,
+    ctx: RequestContext,
+    days: int | None = None,
+    project_type: str | None = None,
+) -> DashboardSummary:
+    scope = RunScope(ctx, days=days, project_type=project_type)
+    project_in_scope = Project.id.in_(scope.projects())
+    run_in_scope = Run.id.in_(scope.runs())
 
     counts = await _run_counts(session, run_in_scope)
     finished = counts.completed + counts.partial + counts.failed + counts.cancelled
@@ -35,7 +43,7 @@ async def build_summary(session: AsyncSession, ctx: RequestContext) -> Dashboard
         select(Run, Project.title)
         .options(selectinload(Run.steps))  # one extra query, ordered by position
         .join(Project, Run.project_id == Project.id)
-        .where(project_in_scope)
+        .where(run_in_scope)
         .order_by(Run.created_at.desc())
         .limit(RECENT_RUNS_LIMIT)
     )
@@ -44,6 +52,7 @@ async def build_summary(session: AsyncSession, ctx: RequestContext) -> Dashboard
     )
 
     return DashboardSummary(
+        filters=Filters(days=days, project_type=project_type),
         demo_data=bool(has_demo),
         projects=await session.scalar(select(func.count()).where(project_in_scope)) or 0,
         runs=counts,
@@ -69,6 +78,9 @@ async def build_summary(session: AsyncSession, ctx: RequestContext) -> Dashboard
             )
             for run, title in recent
         ],
+        metrics=await factory_metrics(session, scope),
+        providers=await provider_metrics(session, scope),
+        agents=await agent_metrics(session, scope),
     )
 
 

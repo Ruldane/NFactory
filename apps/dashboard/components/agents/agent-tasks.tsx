@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 import { AgentCheckPanel } from "@/components/agents/agent-check";
+import { AgentPublishPanel } from "@/components/agents/agent-publish";
 import { DiffView } from "@/components/agents/diff-view";
 import { TONE_CLASSES } from "@/components/runs/tone";
 import {
@@ -335,6 +336,8 @@ function TaskView({ task, pollMs }: { task: AgentTask; pollMs: number }) {
       {isTaskCheckable(task.status) ? (
         <AgentCheckPanel taskId={task.id} pollMs={pollMs} />
       ) : null}
+
+      {task.status === "succeeded" ? <AgentPublishPanel task={task} /> : null}
 
       <div className="flex flex-wrap gap-3">
         {active ? (

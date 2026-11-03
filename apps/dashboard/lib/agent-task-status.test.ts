@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeAgentEvent, describeTaskStatus, isTaskActive } from "@/lib/agent-task-status";
+import { describeAgentEvent, describeTaskStatus, isTaskActive, publicationFacts } from "@/lib/agent-task-status";
 
 describe("describeTaskStatus", () => {
   it("gives every status a glyph and a French label", () => {
@@ -82,5 +82,20 @@ describe("describeCheckStatus", () => {
 
   it("names a handoff waiting for the user", () => {
     expect(describeTaskStatus("awaiting_user").label).toBe("En attente de vous");
+  });
+});
+
+describe("publicationFacts", () => {
+  it("lists the four facts in order, done up to the state GitHub confirmed", () => {
+    expect(publicationFacts("pushed")).toEqual([
+      { key: "local_commit_created", label: "Commit local créé", done: true },
+      { key: "pushed", label: "Branche poussée sur GitHub", done: true },
+      { key: "pr_created", label: "PR brouillon ouverte", done: false },
+      { key: "merged", label: "Fusionnée par un humain", done: false },
+    ]);
+  });
+
+  it("marks nothing done when no fact is confirmed", () => {
+    expect(publicationFacts(null).every((fact) => !fact.done)).toBe(true);
   });
 });

@@ -9,7 +9,8 @@ export function RecentRuns({ runs }: { runs: RecentRun[] }) {
   if (runs.length === 0) {
     return (
       <p className="border border-dashed border-navy/25 px-6 py-10 text-center text-sm text-navy/70">
-        Aucun run pour l&apos;instant. Créez un projet pour lancer la première fabrication.
+        Aucun run pour l&apos;instant. Créez un projet pour lancer la première
+        fabrication.
       </p>
     );
   }

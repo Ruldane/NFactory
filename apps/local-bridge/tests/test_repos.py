@@ -92,4 +92,4 @@ def test_the_public_view_never_shows_the_path(tmp_path: Path, store: Path) -> No
     registry = RepoRegistry(store)
     registry.allow(make_repo(tmp_path / "app"))
 
-    assert registry.public() == [{"id": "app", "name": "app"}]
+    assert registry.public() == [{"id": "app", "name": "app", "github": None}]

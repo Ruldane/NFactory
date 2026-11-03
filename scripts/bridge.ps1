@@ -3,7 +3,8 @@
 # in the dashboard (Moteurs IA, Outils locaux). Stop it with Ctrl+C.
 # Repositories NFactory may work on, then exit: -Allow <folder>, -Revoke <id>, -Repos.
 # -Handoff <task-id>: print how to run Claude Code yourself on a handoff, then exit.
-param([switch]$Pair, [string]$Allow, [string]$Revoke, [switch]$Repos, [string]$Handoff)
+# -AllowPush <id>: allow draft PRs to the GitHub repository of that repository's origin.
+param([switch]$Pair, [string]$Allow, [string]$Revoke, [switch]$Repos, [string]$Handoff, [string]$AllowPush)
 $ErrorActionPreference = "Continue"
 $bridgeArgs = @()
 if ($Allow) {
@@ -15,6 +16,7 @@ if ($Allow) {
 if ($Revoke) { $bridgeArgs += @("--revoke", $Revoke) }
 if ($Repos) { $bridgeArgs += "--repos" }
 if ($Handoff) { $bridgeArgs += @("--handoff", $Handoff) }
+if ($AllowPush) { $bridgeArgs += @("--allow-push", $AllowPush) }
 if ($Pair) { $bridgeArgs += "--pair" }
 Set-Location (Join-Path $PSScriptRoot "../apps/local-bridge")
 uv run --no-project python -m nfactory_bridge @bridgeArgs

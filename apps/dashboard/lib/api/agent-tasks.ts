@@ -1,12 +1,12 @@
 "use client";
 
 // Data hooks for coding-agent tasks on the user's machine through the bridge, and their
-// sandbox checks (tasks 4.3, 4.4).
+// sandbox checks and their GitHub publication (tasks 4.3, 4.4, 4.6).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiGet, apiPost } from "@/lib/api/client";
-import type { AgentCheck, AgentRuntime, AgentTask, LocalRepo } from "@/lib/api/types";
+import type { AgentCheck, AgentRuntime, AgentTask, LocalRepo, Publication } from "@/lib/api/types";
 import { isCheckActive, isTaskActive } from "@/lib/agent-task-status";
 
 export const agentTaskKeys = {
@@ -76,5 +76,29 @@ export function useAgentCheck(id: string | null, pollMs: number) {
     queryFn: () => apiGet<AgentCheck>(`/local-runtimes/checks/${id}`),
     enabled: id !== null,
     refetchInterval: (query) => (query.state.data && !isCheckActive(query.state.data.status) ? false : pollMs),
+  });
+}
+
+function usePublicationUpdate() {
+  const client = useQueryClient();
+  return (taskId: string, publication: Publication) =>
+    client.setQueryData<AgentTask>(agentTaskKeys.task(taskId), (task) => (task ? { ...task, publication } : task));
+}
+
+export function usePublishTask() {
+  const update = usePublicationUpdate();
+  return useMutation({
+    // `approve: true` is sent only from the publication checkbox, never with the launch.
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      apiPost<Publication>(`/local-runtimes/tasks/${id}/publish`, { approve: true, title }),
+    onSuccess: (publication, { id }) => update(id, publication),
+  });
+}
+
+export function useVerifyPublication() {
+  const update = usePublicationUpdate();
+  return useMutation({
+    mutationFn: (id: string) => apiGet<Publication>(`/local-runtimes/tasks/${id}/publication`),
+    onSuccess: (publication, id) => update(id, publication),
   });
 }

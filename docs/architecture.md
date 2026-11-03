@@ -78,6 +78,10 @@ dashboard /agents ─POST /local-runtimes/tasks {repo_id, task, consent: true}�
 relais Claude : pont = worktree + brief ; l'utilisateur lance claude (bridge.ps1 -Handoff) ; POST …/collect
 test : POST /local-runtimes/tasks/{id}/checks ─▶ agent_checks + job check_agent_task
   worker ─GET pont /tasks/{id}/snapshot─▶ Workspace jetable ─▶ superviseur sandbox (pytest) ─▶ JUnit ─▶ verdict
+utilisateur : bridge.ps1 -AllowPush <id> ─▶ repos.json garde owner/nom du remote origin (seule cible)
+publication : POST /local-runtimes/tasks/{id}/publish {approve: true, title} ─▶ audit_log ─▶ pont /publish
+  pont : commit local ─▶ git push de la branche nfactory/… seule ─▶ gh pr create --draft
+  GET …/publication ─▶ pont relit commit, branche et PR sur GitHub (gh api, gh pr list)
 ```
 
 Le pont refuse les navigateurs (`Origin`), les hôtes inconnus (rebinding DNS) et toute requête sans jeton, sauf `/health`. Aucune route n'exécute une commande issue de la requête.

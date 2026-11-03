@@ -9,6 +9,7 @@ import type {
   FileContent,
   FileList,
   Items,
+  OverviewFilters,
   Page,
   Preview,
   Project,
@@ -33,10 +34,19 @@ export const runKeys = {
   preview: (id: string) => ["runs", id, "preview"] as const,
 };
 
-export function useDashboardSummary() {
+export function useDashboardSummary(
+  filters: OverviewFilters = { days: null, project_type: null },
+) {
+  const params: Record<string, string | number> = {};
+  if (filters.days !== null) params.days = filters.days;
+  if (filters.project_type !== null) params.project_type = filters.project_type;
   return useQuery({
-    queryKey: ["dashboard", "summary"],
-    queryFn: () => apiGet<DashboardSummary>("/dashboard/summary"),
+    queryKey: ["dashboard", "summary", filters],
+    queryFn: () =>
+      apiGet<DashboardSummary>(
+        "/dashboard/summary",
+        Object.keys(params).length ? params : undefined,
+      ),
     refetchInterval: OVERVIEW_REFRESH_MS,
   });
 }
@@ -44,7 +54,11 @@ export function useDashboardSummary() {
 export function useProjects(type: ProjectType | null) {
   return useQuery({
     queryKey: ["projects", { type }],
-    queryFn: () => apiGet<Page<Project>>("/projects", type ? { type, limit: 100 } : { limit: 100 }),
+    queryFn: () =>
+      apiGet<Page<Project>>(
+        "/projects",
+        type ? { type, limit: 100 } : { limit: 100 },
+      ),
   });
 }
 
@@ -61,7 +75,9 @@ export function useRun(runId: string) {
     queryKey: runKeys.detail(runId),
     queryFn: () => apiGet<RunDetail>(`/runs/${runId}`),
     refetchInterval: (query) =>
-      query.state.data && !isTerminalRunState(query.state.data.state) ? ACTIVE_RUN_REFRESH_MS : false,
+      query.state.data && !isTerminalRunState(query.state.data.state)
+        ? ACTIVE_RUN_REFRESH_MS
+        : false,
   });
 }
 
@@ -75,7 +91,8 @@ export function useRunFiles(runId: string) {
 export function useFileContent(runId: string, path: string | null) {
   return useQuery({
     queryKey: runKeys.file(runId, path ?? ""),
-    queryFn: () => apiGet<FileContent>(`/runs/${runId}/files/content`, { path: path ?? "" }),
+    queryFn: () =>
+      apiGet<FileContent>(`/runs/${runId}/files/content`, { path: path ?? "" }),
     enabled: path !== null,
   });
 }
@@ -98,7 +115,8 @@ export function useStartPreview(runId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: () => apiPost<Preview>(`/runs/${runId}/preview`),
-    onSuccess: (preview) => client.setQueryData(runKeys.preview(runId), preview),
+    onSuccess: (preview) =>
+      client.setQueryData(runKeys.preview(runId), preview),
   });
 }
 
@@ -107,7 +125,11 @@ export function useStopPreview(runId: string) {
   return useMutation({
     mutationFn: () => apiDelete<null>(`/runs/${runId}/preview`),
     onSuccess: () =>
-      client.setQueryData<Preview>(runKeys.preview(runId), { running: false, url: null, expires_in_s: null }),
+      client.setQueryData<Preview>(runKeys.preview(runId), {
+        running: false,
+        url: null,
+        expires_in_s: null,
+      }),
   });
 }
 
@@ -129,7 +151,10 @@ export function useApproveRun(runId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ approvalId, replacement }: ApprovalInput) =>
-      apiPost<RunDetail>(`/runs/${runId}/approvals/${approvalId}/approve`, replacement ?? {}),
+      apiPost<RunDetail>(
+        `/runs/${runId}/approvals/${approvalId}/approve`,
+        replacement ?? {},
+      ),
     onSuccess: (run) => client.setQueryData(runKeys.detail(runId), run),
   });
 }
@@ -170,8 +195,17 @@ export function useRequestChange(run: RunDetail) {
 
 export function useLaunchProject() {
   return useMutation({
-    mutationFn: async ({ title, type, request, idempotencyKey }: LaunchInput) => {
-      const project = await apiPost<Project>("/projects", { title, type, description: request });
+    mutationFn: async ({
+      title,
+      type,
+      request,
+      idempotencyKey,
+    }: LaunchInput) => {
+      const project = await apiPost<Project>("/projects", {
+        title,
+        type,
+        description: request,
+      });
       return apiPost<RunDetail>(
         `/projects/${project.id}/runs`,
         { request },
@@ -193,7 +227,8 @@ export function useWorkspaceSettings() {
 export function useSaveRunLimits() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (limits: RunLimits) => apiPut<WorkspaceSettings>("/settings/run-limits", limits),
+    mutationFn: (limits: RunLimits) =>
+      apiPut<WorkspaceSettings>("/settings/run-limits", limits),
     onSuccess: (settings) => client.setQueryData(settingsKey, settings),
   });
 }

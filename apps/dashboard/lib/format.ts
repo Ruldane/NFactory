@@ -53,3 +53,28 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${oneDecimal.format(bytes / 1024)} Ko`;
   return `${oneDecimal.format(bytes / (1024 * 1024))} Mo`;
 }
+
+const latency = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+// A model call's latency, in seconds with one decimal.
+export function formatLatency(seconds: number | null): string {
+  if (seconds === null) return "Non mesuré";
+  return seconds > 0 && seconds < 0.05 ? "< 0,1 s" : `${latency.format(seconds)} s`;
+}
+
+// Token counts of a group of calls; null when no call reported them.
+export function formatTokens(input: number | null, output: number | null): string {
+  if (input === null && output === null) return "Non mesuré";
+  return `${input ?? "—"} / ${output ?? "—"}`;
+}
+
+// A delay that may not be recorded at all.
+export function formatWait(seconds: number | null): string {
+  return seconds === null ? "Non mesuré" : formatDuration(seconds);
+}
+
+// The cost of a group of calls; "partiel" when some calls had no known price.
+export function formatCallCost(usdAmount: number | null, complete: boolean): string {
+  if (usdAmount === null) return "Non mesuré";
+  return complete ? usd.format(usdAmount) : `${usd.format(usdAmount)} (partiel)`;
+}

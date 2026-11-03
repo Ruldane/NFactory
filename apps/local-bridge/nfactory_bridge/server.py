@@ -11,6 +11,9 @@ GET    /tasks/<id>          status, events, manifest, diff
 POST   /tasks/<id>/cancel   stop a running task
 POST   /tasks/<id>/collect  import what the user's Claude Code changed (handoff)
 GET    /tasks/<id>/snapshot the finished task's files (base64), tested by NFactory's sandbox
+POST   /tasks/<id>/publish  {"approve": true, "title", "body"}: commit, push the branch,
+                            draft PR (the user approved it in NFactory)
+GET    /tasks/<id>/publication  each publication fact, read back from git and GitHub
 POST   /tasks/<id>/discard  remove the task's worktree and branch
 
 Each route runs a fixed action: no request field ever becomes a command or a path (a
@@ -39,7 +42,8 @@ DRAIN_BYTES = 1_048_576
 ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "host.docker.internal"})
 RUNTIMES = frozenset({"codex", "claude"})
 _TASK_PATH = re.compile(
-    r"^/tasks/(t_[0-9a-f]{12}|[A-Za-z0-9_]{1,40})(/cancel|/discard|/collect|/snapshot)?$"
+    r"^/tasks/(t_[0-9a-f]{12}|[A-Za-z0-9_]{1,40})"
+    r"(/cancel|/discard|/collect|/snapshot|/publish|/publication)?$"
 )
 # The method each task route accepts (no suffix: read the task).
 _TASK_METHODS = {
@@ -48,12 +52,15 @@ _TASK_METHODS = {
     "/cancel": "POST",
     "/discard": "POST",
     "/collect": "POST",
+    "/publish": "POST",
+    "/publication": "GET",
 }
 _REFUSAL_STATUS = {
     "not_found": 404,
     "repo_not_allowed": 403,
     "invalid_task": 400,
     "codex_refused": 400,
+    "push_not_allowed": 403,
 }
 
 Detect = Callable[[], list[dict[str, Any]]]
@@ -67,10 +74,12 @@ class TaskBoard(Protocol):
     def start_handoff(self, repo_id: str, task: str) -> dict[str, Any]: ...
     def collect(self, task_id: str) -> dict[str, Any]: ...
     def snapshot(self, task_id: str) -> dict[str, Any]: ...
+    def publish(self, task_id: str, title: str, body: str) -> dict[str, Any]: ...
+    def publication(self, task_id: str) -> dict[str, Any]: ...
 
 
 class RepoList(Protocol):
-    def public(self) -> list[dict[str, str]]: ...
+    def public(self) -> list[dict[str, str | None]]: ...
 
 
 def make_server(
@@ -173,6 +182,8 @@ def make_server(
         def _task_action(self, task_id: str, action: str | None) -> None:
             if tasks is None:
                 return self._error(404, "not_found", "Tâche inconnue.")
+            if action == "/publish":
+                return self._publish(task_id)
             try:
                 if action == "/cancel":
                     view = tasks.cancel(task_id)
@@ -182,8 +193,30 @@ def make_server(
                     view = tasks.collect(task_id)
                 elif action == "/snapshot":
                     view = tasks.snapshot(task_id)
+                elif action == "/publication":
+                    view = tasks.publication(task_id)
                 else:
                     view = tasks.get(task_id)
+            except TaskRefused as exc:
+                return self._refused(exc)
+            self._json(200, view)
+
+        def _publish(self, task_id: str) -> None:
+            assert tasks is not None
+            body = self._body()
+            if body is None:
+                return None
+            if not isinstance(body, dict) or body.get("approve") is not True:
+                return self._error(
+                    403,
+                    "approval_required",
+                    "La publication demande l'approbation de l'utilisateur.",
+                )
+            title, text = body.get("title"), body.get("body")
+            if not isinstance(title, str) or not title.strip() or not isinstance(text, str):
+                return self._error(400, "invalid_request", "title et body attendus.")
+            try:
+                view = tasks.publish(task_id, title[:200], text[:20_000])
             except TaskRefused as exc:
                 return self._refused(exc)
             self._json(200, view)

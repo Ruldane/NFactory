@@ -3,7 +3,8 @@ scripts/bridge.sh, which run `python -m nfactory_bridge` from apps/local-bridge.
 
 Options: --port (default 8765), --store (pairing file), --pair (show a new pairing code).
 Repository admin, run by the user in their own terminal, then exit: --allow <folder>,
---revoke <id>, --repos, and --handoff <task-id> (how to run Claude Code on a handoff).
+--revoke <id>, --repos, --allow-push <id> (publish to its GitHub origin), and
+--handoff <task-id> (how to run Claude Code on a handoff).
 Every file (pairing hash, authorized repositories, worktrees)
 lives in the user's profile, out of any repository.
 """
@@ -18,6 +19,7 @@ from typing import Any
 
 from nfactory_bridge import __version__
 from nfactory_bridge.detection import Which, detect, newest
+from nfactory_bridge.github import GitHub, GitHubRefused
 from nfactory_bridge.pairing import CODE_TTL_S, Pairing
 from nfactory_bridge.repos import RepoRefused, RepoRegistry
 from nfactory_bridge.server import make_server
@@ -41,13 +43,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--revoke", help="retirer un dépôt autorisé (son identifiant)")
     parser.add_argument("--repos", action="store_true", help="lister les dépôts autorisés")
     parser.add_argument("--handoff", help="afficher comment lancer Claude Code sur un relais")
+    parser.add_argument("--allow-push", help="autoriser la publication GitHub d'un dépôt (son id)")
     return parser
 
 
 def manage(argv: list[str], say: Callable[[str], None]) -> bool:
     """Run a repository admin option; False when there is none (start the bridge)."""
     args = _parser().parse_args(argv)
-    if not (args.allow or args.revoke or args.repos or args.handoff):
+    if not (args.allow or args.revoke or args.repos or args.handoff or args.allow_push):
         return False
     if args.handoff:
         lines = handoff_instructions(args.store.parent / "worktrees", args.handoff)
@@ -62,6 +65,15 @@ def manage(argv: list[str], say: Callable[[str], None]) -> bool:
             say(f"Refusé : {exc}")
             return True
         say(f"Dépôt autorisé : {repo.id} ({repo.path})")
+    if args.allow_push:
+        try:
+            repo = registry.allow_push(args.allow_push)
+        except RepoRefused as exc:
+            say(f"Refusé : {exc}")
+            return True
+        say(
+            f"Publication autorisée : {repo.id} → github.com/{repo.github} (PR brouillon seulement)"
+        )
     if args.revoke:
         registry.revoke(args.revoke)
         say(f"Dépôt retiré : {args.revoke}")
@@ -69,7 +81,8 @@ def manage(argv: list[str], say: Callable[[str], None]) -> bool:
         repos = registry.all()
         say("Dépôts autorisés :" if repos else "Aucun dépôt autorisé.")
         for repo in repos:
-            say(f"  {repo.id}  {repo.path}")
+            target = f"  → github.com/{repo.github}" if repo.github else ""
+        say(f"  {repo.id}  {repo.path}{target}")
     return True
 
 
@@ -89,6 +102,27 @@ def codex_resolver(which: Which, status: Callable[[], dict[str, Any]]) -> Callab
     return resolve
 
 
+def gh_resolver(which: Which, status: Callable[[], dict[str, Any]]) -> Callable[[], str]:
+    """The gh executable, once GitHub CLI is installed and logged in."""
+
+    def resolve() -> str:
+        path = which("gh")
+        if path is None:
+            raise GitHubRefused("GitHub CLI (gh) n'est pas installé sur ce poste.", "not_installed")
+        if status().get("status") != "connected":
+            raise GitHubRefused(
+                "GitHub CLI n'est pas connecté : lancez « gh auth login » dans un terminal.",
+                "needs_login",
+            )
+        return path
+
+    return resolve
+
+
+def _gh_status() -> dict[str, Any]:
+    return next(tool for tool in detect() if tool["kind"] == "gh")
+
+
 def _codex_status() -> dict[str, Any]:
     return next(tool for tool in detect() if tool["kind"] == "codex")
 
@@ -98,7 +132,10 @@ def start(argv: list[str], say: Callable[[str], None]) -> tuple[ThreadingHTTPSer
     pairing = Pairing(args.store)
     repos = RepoRegistry(args.store.parent / "repos.json")
     tasks = Tasks(
-        repos, args.store.parent / "worktrees", codex=codex_resolver(newest, _codex_status)
+        repos,
+        args.store.parent / "worktrees",
+        codex=codex_resolver(newest, _codex_status),
+        github=GitHub(gh=gh_resolver(newest, _gh_status)),
     )
     server = make_server(HOST, args.port, pairing=pairing, detect=detect, tasks=tasks, repos=repos)
     port = server.server_address[1]

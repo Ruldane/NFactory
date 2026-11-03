@@ -47,6 +47,23 @@ TASK = {
 }
 
 
+PUBLICATION: dict[str, Any] = {
+    "repo": "Ruldane/nfactory-test",
+    "commit": "c" * 40,
+    "state": "pr_created",
+    "pushed": True,
+    "pr": {
+        "number": 1,
+        "url": "https://github.com/Ruldane/nfactory-test/pull/1",
+        "state": "OPEN",
+        "draft": True,
+        "head": "c" * 40,
+        "merged": False,
+    },
+    "verified_at": 1_800_000_100.0,
+}
+
+
 class FakeBridge:
     def __init__(self) -> None:
         self.up = True
@@ -54,6 +71,7 @@ class FakeBridge:
         self.actions: list[tuple[str, str]] = []
         self.tokens: list[str] = []
         self.status = "succeeded"
+        self.published: list[dict[str, Any]] = []
 
     async def health(self) -> dict[str, Any]:
         if not self.up:
@@ -83,6 +101,14 @@ class FakeBridge:
             )
         self.started.append(body)
         return {**TASK, "status": "running"}
+
+    async def publish(self, token: str, task_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        self.tokens.append(token)
+        self.published.append(body)
+        return PUBLICATION
+
+    async def publication(self, token: str, task_id: str) -> dict[str, Any]:
+        return {**PUBLICATION, "state": "merged", "pr": {**PUBLICATION["pr"], "merged": True}}
 
     async def task(self, token: str, task_id: str, action: str | None = None) -> dict[str, Any]:
         self.tokens.append(token)
@@ -144,7 +170,8 @@ async def test_repositories_are_relayed_with_valid_ids_only(http) -> None:  # ty
 
     response = await http.get("/api/v1/local-runtimes/repos")
 
-    assert response.json() == {"repos": [{"id": "nfactory-test", "name": "nfactory-test"}]}
+    repo = {"id": "nfactory-test", "name": "nfactory-test", "github": None}
+    assert response.json() == {"repos": [repo]}
 
 
 async def test_a_task_starts_only_with_consent(http, bridge) -> None:  # type: ignore[no-untyped-def]
@@ -234,6 +261,16 @@ async def test_a_claude_handoff_is_prepared_with_consent_then_collected(http, br
     assert bridge.actions[-1] == (TASK["id"], "collect")
 
 
+async def _finish_check(http, check_id: str) -> None:  # type: ignore[no-untyped-def]
+    from nfactory_core.models import AgentCheck
+
+    async with http._transport.app.state.database.sessions() as session:
+        check = await session.get_one(AgentCheck, check_id)
+        check.status = "passed"
+        check.report = {"passed": 3, "failed": 0, "errors": 0, "skipped": 0, "failures": []}
+        await session.commit()
+
+
 async def test_a_finished_task_is_queued_for_a_sandbox_check(http, queue) -> None:  # type: ignore[no-untyped-def]
     await paired(http)
 
@@ -263,3 +300,59 @@ async def test_an_unknown_check_is_404(http) -> None:  # type: ignore[no-untyped
     response = await http.get("/api/v1/local-runtimes/checks/agc_doesnotexist")
 
     assert response.status_code == 404
+
+
+PUBLISH = {"approve": True, "title": "Ajoute multiply"}
+
+
+async def test_publishing_needs_approval(http, bridge) -> None:  # type: ignore[no-untyped-def]
+    await paired(http)
+
+    response = await http.post(
+        f"/api/v1/local-runtimes/tasks/{TASK['id']}/publish", json={**PUBLISH, "approve": False}
+    )
+
+    assert response.status_code == 422
+    assert bridge.published == []
+
+
+async def test_an_approved_publish_sends_a_pr_body_with_the_verified_tests(
+    http, bridge, queue
+) -> None:  # type: ignore[no-untyped-def]
+    await paired(http)
+    check = (await http.post(f"/api/v1/local-runtimes/tasks/{TASK['id']}/checks")).json()
+    await _finish_check(http, check["id"])
+
+    response = await http.post(f"/api/v1/local-runtimes/tasks/{TASK['id']}/publish", json=PUBLISH)
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "pr_created"
+    sent = bridge.published[0]
+    assert sent["approve"] is True and sent["title"] == "Ajoute multiply"
+    assert "calc.py" in sent["body"]
+    assert "3 réussis" in sent["body"] and "0 en échec" in sent["body"]
+    assert "brouillon" in sent["body"]
+
+
+async def test_a_publish_is_recorded_in_the_audit_log(http) -> None:  # type: ignore[no-untyped-def]
+    await paired(http)
+    await http.post(f"/api/v1/local-runtimes/tasks/{TASK['id']}/publish", json=PUBLISH)
+
+    from sqlalchemy import select
+
+    from nfactory_core.models import AuditLog
+
+    async with http._transport.app.state.database.sessions() as session:  # type: ignore[attr-defined]
+        rows = (await session.scalars(select(AuditLog))).all()
+    entry = next(row for row in rows if row.action == "agent_task.publish")
+    assert entry.target == TASK["id"] and entry.decision == "approved"
+    assert entry.redacted_details["repo"] == "Ruldane/nfactory-test"
+
+
+async def test_the_publication_is_verified_again_on_read(http) -> None:  # type: ignore[no-untyped-def]
+    await paired(http)
+
+    response = await http.get(f"/api/v1/local-runtimes/tasks/{TASK['id']}/publication")
+
+    assert response.json()["state"] == "merged"
+    assert response.json()["pr"]["merged"] is True

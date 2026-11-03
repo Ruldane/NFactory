@@ -10,10 +10,16 @@ user runs the official `claude` there themselves (`handoff_instructions`), then 
 NFactory to collect the changes. A finished task offers a snapshot of its files, which
 NFactory tests in its sandbox: generated code never runs on the bridge.
 
+Publishing (task 4.6), after the user's approval in NFactory: a local commit on the task's
+branch, a push of that branch only (never forced), then a draft PR through the user's
+`gh`, on a repository the user allowed to push to (`-AllowPush`). `publication` reads each
+fact back (`local_commit_created`, `pushed`, `pr_created`, `merged`) from git and GitHub.
+
 Tasks live in memory: after a bridge restart their worktrees stay on disk but are no
 longer listed.
 
-Interface: Tasks (start_codex, start_handoff, get, cancel, collect, snapshot, discard),
+Interface: Tasks (start_codex, start_handoff, get, cancel, collect, snapshot, publish,
+publication, discard),
 handoff_instructions, TaskRefused.
 """
 
@@ -26,10 +32,11 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from nfactory_bridge import git_workspace
 from nfactory_bridge.codex_runtime import CodexRefused, CodexResult, codex_argv, run_codex
+from nfactory_bridge.github import GitHubRefused
 from nfactory_bridge.repos import RepoRefused, RepoRegistry
 
 TASK_MAX_CHARS = 4_000
@@ -71,6 +78,8 @@ class _Task:
     error: str = ""
     created_at: float = field(default_factory=time.time)
     cancel: threading.Event = field(default_factory=threading.Event)
+    commit: str | None = None  # NFactory's local commit, once published
+    publication: dict[str, Any] | None = None
 
     def view(self) -> dict[str, Any]:
         return {
@@ -86,10 +95,20 @@ class _Task:
             "diff_truncated": self.diff_truncated,
             "error": self.error,
             "created_at": self.created_at,
+            "publication": self.publication,
         }
 
 
 Runner = Callable[..., CodexResult]
+
+
+class GitHubPort(Protocol):
+    def default_branch(self, slug: str) -> str: ...
+    def branch_sha(self, slug: str, branch: str) -> str | None: ...
+    def find_pr(self, slug: str, branch: str) -> dict[str, Any] | None: ...
+    def create_draft_pr(
+        self, slug: str, *, base: str, head: str, title: str, body: str
+    ) -> None: ...
 
 
 class Tasks:
@@ -100,11 +119,13 @@ class Tasks:
         *,
         codex: Callable[[], str],
         runner: Runner = run_codex,
+        github: GitHubPort | None = None,
     ) -> None:
         self._repos = repos
         self._root = root
         self._codex = codex  # the Codex executable, or TaskRefused if not usable
         self._runner = runner
+        self._github = github
         self._lock = threading.Lock()
         self._tasks: dict[str, _Task] = {}
 
@@ -173,6 +194,76 @@ class Tasks:
         item = self._find(task_id)
         item.cancel.set()
         return item.view()
+
+    def publish(self, task_id: str, title: str, body: str) -> dict[str, Any]:
+        """Commit, push the task's branch and open a draft PR. The user approved it in
+        NFactory; nothing is merged, and only an allowed repository is reached."""
+        item = self._find(task_id)
+        if item.status != "succeeded":
+            raise TaskRefused(
+                "invalid_state", "Seule une tâche terminée avec des changements se publie."
+            )
+        slug, github = self._push_target(item)
+        try:
+            with self._lock:
+                if item.commit is None:
+                    item.commit = git_workspace.commit(item.work, _commit_message(title))
+            git_workspace.push(item.work)
+            if github.find_pr(slug, item.work.branch) is None:
+                base = github.default_branch(slug)
+                github.create_draft_pr(
+                    slug, base=base, head=item.work.branch, title=title, body=body
+                )
+        except git_workspace.GitRefused as exc:
+            raise TaskRefused("git_refused", str(exc)) from exc
+        except GitHubRefused as exc:
+            raise TaskRefused(exc.code, str(exc)) from exc
+        return self.publication(task_id)
+
+    def publication(self, task_id: str) -> dict[str, Any]:
+        """Each publication fact, read back from git and GitHub (spec §13)."""
+        item = self._find(task_id)
+        if item.commit is None:
+            raise TaskRefused("invalid_state", "Cette tâche n'a pas encore été publiée.")
+        slug, github = self._push_target(item)
+        try:
+            committed = git_workspace.head(item.work) == item.commit
+            remote = github.branch_sha(slug, item.work.branch)
+            pr = github.find_pr(slug, item.work.branch)
+        except (git_workspace.GitRefused, GitHubRefused) as exc:
+            raise TaskRefused("github_refused", str(exc)) from exc
+        pushed = remote is not None and remote == item.commit
+        state = None
+        for fact, ok in (
+            ("local_commit_created", committed),
+            ("pushed", pushed),
+            ("pr_created", pr is not None),
+            ("merged", bool(pr and pr["merged"])),
+        ):
+            if not ok:
+                break
+            state = fact
+        item.publication = {
+            "repo": slug,
+            "commit": item.commit,
+            "state": state,
+            "pushed": pushed,
+            "pr": pr,
+            "verified_at": time.time(),
+        }
+        return item.publication
+
+    def _push_target(self, item: _Task) -> tuple[str, GitHubPort]:
+        repo = self._repos.get(item.repo_id)
+        if repo.github is None:
+            raise TaskRefused(
+                "push_not_allowed",
+                "Publication non autorisée pour ce dépôt : lancez "
+                f"bridge.ps1 -AllowPush {repo.id}.",
+            )
+        if self._github is None:
+            raise TaskRefused("github_unavailable", "GitHub CLI indisponible sur ce pont.")
+        return repo.github, self._github
 
     def discard(self, task_id: str) -> dict[str, Any]:
         """Remove the task's worktree and branch (rollback)."""
@@ -252,6 +343,11 @@ class Tasks:
         if item is None:
             raise TaskRefused("not_found", "Tâche inconnue.")
         return item
+
+
+def _commit_message(title: str) -> str:
+    first = " ".join(title.split())[:72] or "Changement proposé par NFactory"
+    return f"{first}\n\nProposé par NFactory, approuvé par l'utilisateur avant publication."
 
 
 def _brief_path(root: Path, repo_id: str, task_id: str) -> Path:

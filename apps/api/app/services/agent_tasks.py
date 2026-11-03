@@ -7,7 +7,11 @@ again (schemas.agent_tasks) and redacted: a command line may carry a secret. Tas
 in the bridge; the API stores only their sandbox checks (`agent_checks`), which the
 worker runs.
 
-Interface: repos, start, get, act (cancel / discard / collect), start_check, get_check.
+Publishing (task 4.6) needs the user's approval: the API records it in the audit log,
+writes the draft PR's body (changed files, the sandbox verdict, the limits) and relays.
+
+Interface: repos, start, get, act (cancel / discard / collect), start_check, get_check,
+publish, publication.
 """
 
 from typing import Any, Literal
@@ -20,10 +24,12 @@ from app.errors import AppError
 from app.queue import JobQueue, QueueUnavailableError
 from app.schemas.agent_tasks import (
     AgentCheckOut,
+    AgentPublishIn,
     AgentTaskIn,
     AgentTaskOut,
     LocalRepo,
     LocalReposOut,
+    Publication,
     drop_invalid_events,
 )
 from app.services.identity import RequestContext
@@ -36,7 +42,7 @@ from app.services.local_runtimes import (
     paired_token,
 )
 from nfactory_core.events.redaction import redact
-from nfactory_core.models import AgentCheck
+from nfactory_core.models import AgentCheck, AuditLog
 from nfactory_core.secrets import SecretStore
 
 Action = Literal["cancel", "discard", "collect"]
@@ -131,6 +137,93 @@ async def get_check(session: AsyncSession, ctx: RequestContext, check_id: str) -
     if check is None:
         raise AppError(404, "not_found", "Test introuvable.")
     return AgentCheckOut.model_validate(check)
+
+
+async def publish(
+    session: AsyncSession,
+    ctx: RequestContext,
+    bridge: BridgeClient,
+    store: SecretStore,
+    task_id: str,
+    data: AgentPublishIn,
+) -> Publication:
+    """Commit, push the task's branch and open a draft PR, after the user's approval."""
+    task = await get(session, ctx, bridge, store, task_id)
+    body = _pr_body(task, await _latest_check(session, ctx, task_id))
+    token = await _token(session, ctx, store)
+    answer = await _relay(
+        bridge.publish(token, task_id, {"approve": True, "title": data.title, "body": body})
+    )
+    result = _publication(answer)
+    session.add(
+        AuditLog(
+            actor_id=ctx.user_id,
+            action="agent_task.publish",
+            target=task_id,
+            decision="approved",
+            redacted_details={
+                "repo": result.repo,
+                "branch": task.branch,
+                "state": result.state,
+                "pr": result.pr.url if result.pr else None,
+            },
+        )
+    )
+    await session.commit()
+    return result
+
+
+async def publication(
+    session: AsyncSession,
+    ctx: RequestContext,
+    bridge: BridgeClient,
+    store: SecretStore,
+    task_id: str,
+) -> Publication:
+    token = await _token(session, ctx, store)
+    return _publication(await _relay(bridge.publication(token, task_id)))
+
+
+async def _latest_check(
+    session: AsyncSession, ctx: RequestContext, task_id: str
+) -> AgentCheck | None:
+    return await session.scalar(
+        select(AgentCheck)
+        .where(AgentCheck.task_id == task_id, AgentCheck.workspace_id == ctx.default_workspace_id)
+        .order_by(AgentCheck.created_at.desc())
+        .limit(1)
+    )
+
+
+_CHANGE_FR = {"added": "ajouté", "modified": "modifié", "deleted": "supprimé"}
+
+
+def _pr_body(task: AgentTaskOut, check: AgentCheck | None) -> str:
+    agent = "Codex (piloté par NFactory)" if task.runtime == "codex" else "Claude Code (relais)"
+    files = "\n".join(f"- `{m.path}` ({_CHANGE_FR[m.change]})" for m in task.manifest[:200])
+    if check is None or check.report is None:
+        tests = "Non testé dans le sandbox de NFactory."
+    else:
+        r = check.report
+        tests = (
+            f"Sandbox NFactory ({check.status}) : {r.get('passed', 0)} réussis, "
+            f"{int(r.get('failed', 0)) + int(r.get('errors', 0))} en échec "
+            "(rapport JUnit, pas l'avis de l'agent)."
+        )
+    return (
+        "PR **brouillon** préparée par NFactory, publiée après approbation de l'utilisateur.\n\n"
+        f"**Agent :** {agent}\n**Branche :** `{task.branch}` (base `{task.base[:12]}`)\n\n"
+        f"### Fichiers changés\n{files or '- aucun'}\n\n### Tests\n{tests}\n\n"
+        "### Limites\n- Les dépendances du dépôt ne sont pas installées dans le sandbox.\n"
+        "- Aucun merge automatique : la revue et la fusion restent humaines.\n"
+    )
+
+
+def _publication(raw: dict[str, Any]) -> Publication:
+    try:
+        return Publication.model_validate(raw)
+    except ValidationError as exc:
+        raise AppError(502, "bridge_invalid_answer", "Réponse du pont local inattendue.") from exc
 
 
 async def _token(session: AsyncSession, ctx: RequestContext, store: SecretStore) -> str:

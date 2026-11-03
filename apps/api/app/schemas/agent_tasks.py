@@ -25,11 +25,16 @@ Runtime = Literal["codex", "claude"]  # claude: handoff only, the user runs it (
 CheckStatus = Literal["queued", "running", "passed", "failed", "not_tested", "error"]
 
 
+GITHUB_SLUG = r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$"
+PublicationState = Literal["local_commit_created", "pushed", "pr_created", "merged"]
+
+
 class LocalRepo(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: str = Field(pattern=REPO_ID)
     name: str = Field(max_length=100)
+    github: str | None = Field(default=None, pattern=GITHUB_SLUG)  # allowed push target
 
 
 class LocalReposOut(BaseModel):
@@ -65,6 +70,35 @@ class ManifestEntry(BaseModel):
     change: Literal["added", "modified", "deleted"]
 
 
+class PullRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    number: int
+    url: str = Field(pattern=r"^https://github\.com/", max_length=300)
+    state: str = Field(max_length=20)
+    draft: bool
+    head: str = Field(max_length=40)
+    merged: bool
+
+
+class Publication(BaseModel):
+    """Publication facts as the bridge read them back from git and GitHub (spec §13)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    repo: str = Field(pattern=GITHUB_SLUG)
+    commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    state: PublicationState | None
+    pushed: bool
+    pr: PullRequest | None
+    verified_at: float
+
+
+class AgentPublishIn(BaseModel):
+    approve: Literal[True]  # the user approved this push and draft PR, separately from launch
+    title: str = Field(min_length=1, max_length=200)
+
+
 class AgentTaskOut(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -80,6 +114,7 @@ class AgentTaskOut(BaseModel):
     diff_truncated: bool = False
     error: str = Field(default="", max_length=1_100)
     created_at: float
+    publication: Publication | None = None
 
 
 class AgentCheckOut(BaseModel):
