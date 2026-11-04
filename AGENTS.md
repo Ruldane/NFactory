@@ -83,6 +83,7 @@ Each project type is one recipe, and the pipeline never changes for a new one.
 | Dashboard | `npm --prefix apps/dashboard test`, `run lint`, `run typecheck` |
 | Evals (37 scenarios, JSON/HTML report in `evals/reports/`) | `./scripts/evals.ps1` (in the sandbox: all cases) or `uv run python -m nfactory_worker.evals` (local: PowerShell cases skip without `pwsh`). Add `--engine demo --engine <kind>:<model>` to compare engines connected in Moteurs IA (`bench-*.html`, ADR-0012); a real engine is billed |
 | E2E (Playwright, stack running in demo mode) | `npm --prefix apps/dashboard run e2e` (first time: `npx --prefix apps/dashboard playwright install chromium`) |
+| Third-party notices + licence policy (fails on GPL/AGPL/SSPL; CI job `supply-chain` also builds the CycloneDX SBOMs) | `uv run python scripts/third_party.py` (writes the git-ignored `THIRD_PARTY_NOTICES.md`) |
 | Baseline load test (stack running, demo engine only) | `uv run python scripts/load_test.py`; reference figures in `docs/load-baseline.md` |
 | Whole stack + smoke | `./scripts/dev.ps1` (fills missing `.env` secrets, then `docker compose up -d --build`), then `uv run python scripts/smoke_test.py` |
 

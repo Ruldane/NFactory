@@ -37,6 +37,38 @@ jobs:
       - run: uv run mypy packages/core-py/src apps/api/app apps/worker/nfactory_worker apps/local-bridge/nfactory_bridge
       - run: uv run pytest
 
+  supply-chain:
+    # SBOMs, third-party notices and the licence policy (SECURITY.md, docs/legal/revue-france.md §6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.12.22"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/dashboard/package-lock.json
+            apps/sandbox/web-deps/package-lock.json
+      - run: uv sync --all-packages --frozen
+      - run: npm ci --prefix apps/dashboard
+      - run: npm ci --prefix apps/sandbox/web-deps
+      - name: SBOMs (CycloneDX)
+        run: |
+          mkdir -p supply-chain
+          uv export --all-packages --frozen --no-dev --format cyclonedx1.5 -o supply-chain/sbom-python.cdx.json
+          (cd apps/dashboard && npm sbom --sbom-format cyclonedx --omit dev) > supply-chain/sbom-dashboard.cdx.json
+          (cd apps/sandbox/web-deps && npm sbom --sbom-format cyclonedx) > supply-chain/sbom-sandbox-web.cdx.json
+      - name: Third-party notices and licence policy
+        run: uv run python scripts/third_party.py --out supply-chain/THIRD_PARTY_NOTICES.md
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: supply-chain
+          path: supply-chain/
+
   dashboard:
     runs-on: ubuntu-latest
     defaults:

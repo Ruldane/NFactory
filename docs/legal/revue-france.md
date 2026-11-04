@@ -81,6 +81,7 @@ Référence CNIL : recommandations sur le développement des systèmes d'IA, fin
   - un `SECURITY.md` (canal de signalement des vulnérabilités) ;
   - une **SBOM** générée en CI (voir l'inventaire du §6) ;
   - des mises à jour de sécurité suivies.
+- *Fait : `SECURITY.md` (signalement privé par GitHub) et SBOM CycloneDX produites à chaque push par le job CI `supply-chain`. Reste à activer le signalement privé dans les réglages du dépôt.*
 
 ## 5. Responsabilité du fait des produits
 
@@ -111,7 +112,7 @@ Référence CNIL : recommandations sur le développement des systèmes d'IA, fin
   - Le CC-BY-4.0 demande une attribution.
 - Outils du sandbox (`web-deps`, 114 paquets) : MIT, Apache-2.0, MPL-2.0, BSD, ISC, CC0 et BlueOak. Aucune GPL ni AGPL.
 - Polices Fraunces, Instrument Sans et JetBrains Mono : SIL OFL 1.1, libre usage. Conserver la licence en cas de redistribution.
-- Action : générer une SBOM et un fichier `THIRD_PARTY_NOTICES` en CI.
+- Action : générer une SBOM et un fichier `THIRD_PARTY_NOTICES` en CI. *Fait : `scripts/third_party.py` liste 501 composants (Python 96, dashboard en production 291, outils web du sandbox 114) avec leurs textes de licence, et fait échouer la CI si un composant n'est disponible que sous GPL, AGPL ou SSPL.*
 
 **Code généré.** Les modèles de recettes (`*.tmpl`) sont à vous. Décidez sous quelle licence le code généré est remis au client ; le plus simple est une cession ou une licence libre sans restriction. Les conditions commerciales d'OpenAI et d'Anthropic attribuent les sorties à l'utilisateur (**à vérifier** dans la version en vigueur de chaque contrat).
 
@@ -139,7 +140,7 @@ Référence CNIL : recommandations sur le développement des systèmes d'IA, fin
 | 1 | Choisir la licence du dépôt et ajouter `LICENSE` | Vous | Avant d'inviter d'autres utilisateurs |
 | 2 | Marquage « généré par IA » des livrables (manifeste + métadonnées) et mention IA dans l'interface | Agent (code, test d'abord) | Fait le 3 novembre 2026 (ADR-0014) |
 | 3 | Politique de rétention + export/effacement par membre | Agent (phase 6) | Fait le 4 novembre 2026 (ADR-0015) |
-| 4 | `SECURITY.md`, SBOM et `THIRD_PARTY_NOTICES` en CI | Agent | Phase 6 |
+| 4 | `SECURITY.md`, SBOM et `THIRD_PARTY_NOTICES` en CI | Agent | Fait le 4 novembre 2026 (job CI `supply-chain`) |
 | 5 | Pays de traitement par fournisseur + option « UE ou local uniquement » | Agent (phase 6) | Phase 6 |
 | 6 | Modèles de registre des traitements et d'information SSO | Agent (brouillon) puis avocat | Avant le premier client |
 | 7 | Revue par un avocat : statut AI Act art. 50(2), CRA, responsabilité du code généré, CGU/CGV, DPA | Avocat | Avant toute vente |
