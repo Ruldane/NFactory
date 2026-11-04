@@ -24,12 +24,15 @@ must verify before using it, and its known limits. Short sentences, no jargon.
 )
 
 
-def explanation_markdown(title: str, explanation: Explanation) -> str:
+def explanation_markdown(title: str, explanation: Explanation, notice: str) -> str:
+    """`notice` is the AI-generated statement, quoted under the title (ADR-0014)."""
+
     def bullets(items: list[str]) -> str:
         return "\n".join(f"- {' '.join(item.split())}" for item in items) or "- Aucun"
 
     return (
         f"# Explication — {' '.join(title.split())}\n\n"
+        f"> {notice}\n\n"
         f"{explanation.summary}\n\n"
         f"## Ce qui a été produit\n\n{bullets(explanation.generated)}\n\n"
         f"## À vérifier avant utilisation\n\n{bullets(explanation.verify)}\n\n"

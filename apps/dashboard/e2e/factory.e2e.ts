@@ -33,11 +33,16 @@ test("a need becomes a tested Excel workbook that can be downloaded", async ({
     );
   await page.getByPlaceholder("Rapport des heures").fill(title);
   await pickExcel(page);
+  // AI Act art. 50 (ADR-0014): the user is told AI agents handle the request.
+  await expect(page.getByRole("note")).toContainText("agents d'IA");
   await page.getByRole("button", { name: "Lancer la fabrication" }).click();
 
   await expect(page).toHaveURL(RUN_URL);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   await waitUntilDelivered(page);
+  await expect(
+    page.getByRole("note").filter({ hasText: "Livrables générés par IA" }),
+  ).toBeVisible();
 
   const workbook = page.locator("a[download]", { hasText: ".xlsx" }).first();
   await expect(workbook).toBeVisible();

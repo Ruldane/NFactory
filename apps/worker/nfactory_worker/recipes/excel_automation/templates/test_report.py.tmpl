@@ -94,3 +94,7 @@ def test_chart_is_embedded_and_no_macros(built: Path) -> None:
         names = archive.namelist()
     assert any(name.startswith("xl/charts/") for name in names)
     assert not any("vbaProject" in name for name in names)
+
+
+def test_the_workbook_says_it_was_generated_by_ai(workbook: Workbook) -> None:
+    assert "généré par IA" in (workbook.properties.keywords or "")

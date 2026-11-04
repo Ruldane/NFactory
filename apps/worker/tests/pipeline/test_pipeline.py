@@ -1,6 +1,8 @@
 """End-to-end pipeline behaviour, demo mode, real recipes and real commands."""
 
+import hashlib
 import io
+import json
 import sys
 import zipfile
 from pathlib import Path
@@ -8,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from nfactory_core.pipeline import step_names
+from nfactory_worker.artifacts import AI_NOTICE
 from nfactory_worker.brief import Brief
 from nfactory_worker.pipeline import execute_run
 from nfactory_worker.recipes import Check, RenderedProject
@@ -44,6 +47,31 @@ async def test_non_code_runs_deliver_their_file(
     names = [artifact.filename for artifact in harness.reporter.artifacts]
     assert any(name.endswith(extension) for name in names)
     assert any(name.endswith(".zip") for name in names)
+
+
+async def test_the_zip_carries_an_ai_generated_manifest_of_its_files(harness) -> None:
+    await execute_run(harness.deps(), harness.input("excel", "excel-automation", "KPI hebdo"))
+    zip_artifact = next(a for a in harness.reporter.artifacts if a.filename.endswith(".zip"))
+    archive = zipfile.ZipFile(Path(zip_artifact.path))
+
+    manifest = json.loads(archive.read(".nfactory/provenance.json"))
+
+    assert manifest["ai_generated"] is True and manifest["run_id"] == "run_test"
+    listed = {entry["path"]: entry["sha256"] for entry in manifest["files"]}
+    zipped = set(archive.namelist()) - {".nfactory/provenance.json"}
+    assert set(listed) == zipped and "EXPLICATION.md" in listed
+    for name in zipped:
+        assert listed[name] == hashlib.sha256(archive.read(name)).hexdigest(), name
+
+
+async def test_the_explanation_opens_on_the_ai_generated_notice(harness) -> None:
+    await execute_run(harness.deps(), harness.input("excel", "excel-automation", "KPI hebdo"))
+    zip_artifact = next(a for a in harness.reporter.artifacts if a.filename.endswith(".zip"))
+    archive = zipfile.ZipFile(Path(zip_artifact.path))
+
+    explanation = archive.read("EXPLICATION.md").decode("utf-8").splitlines()
+
+    assert explanation[2] == f"> {AI_NOTICE}"
 
 
 async def test_zip_is_reproducible_and_its_tests_pass_outside_nfactory(

@@ -1,10 +1,16 @@
 """review, docs and package steps: comment, explain, and store the delivery."""
 
+import json
 from typing import Any
 
 from nfactory_core.workspace import Workspace
 from nfactory_worker.agents import DOCUMENTER, REVIEWER, explanation_markdown
-from nfactory_worker.artifacts import zip_workspace
+from nfactory_worker.artifacts import (
+    AI_NOTICE,
+    PROVENANCE_FILE,
+    provenance_manifest,
+    zip_workspace,
+)
 from nfactory_worker.changes import diff_workspaces
 from nfactory_worker.pipeline.nodes.common import Update, brief_of, call_agent, workspace_of
 from nfactory_worker.pipeline.nodes.verification import LEAK_SCAN
@@ -73,7 +79,9 @@ async def docs(state: FactoryState, deps: PipelineDeps) -> Update:
         "checks": _all_results(state),
     }
     call = await call_agent(deps, state, "docs", DOCUMENTER, payload)
-    workspace.write_files({EXPLANATION_FILE: explanation_markdown(brief.title, call.output)})
+    workspace.write_files(
+        {EXPLANATION_FILE: explanation_markdown(brief.title, call.output, AI_NOTICE)}
+    )
     output = {"explanation": call.output.model_dump(mode="json"), "agent": call.agent}
     return {**call.counted, "output": output}
 
@@ -82,6 +90,14 @@ async def package(state: FactoryState, deps: PipelineDeps) -> Update:
     workspace = workspace_of(deps, state)
     slug = brief_of(state).slug
     run_id = state["run_id"]
+    manifest = provenance_manifest(
+        workspace,
+        run_id=run_id,
+        project_type=state["project_type"],
+        recipe_kind=state["recipe_kind"],
+        engines=deps.engines,
+    )
+    workspace.write_files({PROVENANCE_FILE: json.dumps(manifest, ensure_ascii=False, indent=2)})
     stored = [deps.artifacts.save(run_id, f"{slug}.zip", zip_workspace(workspace))]
     if state.get("changes_patch"):
         patch = state["changes_patch"].encode("utf-8")

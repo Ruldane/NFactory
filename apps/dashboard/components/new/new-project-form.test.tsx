@@ -23,7 +23,10 @@ const recipes = {
   ],
 };
 
-type Route = (url: string, init?: RequestInit) => { status: number; body: unknown };
+type Route = (
+  url: string,
+  init?: RequestInit,
+) => { status: number; body: unknown };
 
 function serve(route: Route) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -35,7 +38,9 @@ function serve(route: Route) {
 }
 
 function renderForm() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <QueryClientProvider client={client}>
       <NewProjectForm />
@@ -44,10 +49,14 @@ function renderForm() {
 }
 
 async function fillAndSubmit(request: string) {
-  await userEvent.click(await screen.findByRole("radio", { name: /Classeur Excel/ }));
+  await userEvent.click(
+    await screen.findByRole("radio", { name: /Classeur Excel/ }),
+  );
   await userEvent.type(screen.getByLabelText("Nom du projet"), "Heures");
   await userEvent.type(screen.getByLabelText("Votre besoin"), request);
-  await userEvent.click(screen.getByRole("button", { name: "Lancer la fabrication" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Lancer la fabrication" }),
+  );
 }
 
 afterEach(() => {
@@ -56,10 +65,20 @@ afterEach(() => {
 });
 
 describe("NewProjectForm", () => {
+  it("says the request is handled by AI agents (AI Act, article 50)", async () => {
+    serve(() => ({ status: 200, body: recipes }));
+    renderForm();
+
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      "Votre demande est traitée par des agents d'IA",
+    );
+  });
+
   it("creates the project, launches the run and opens its page", async () => {
     const fetchMock = serve((url) => {
       if (url.endsWith("/recipes")) return { status: 200, body: recipes };
-      if (url.endsWith("/projects")) return { status: 201, body: { id: "proj_1" } };
+      if (url.endsWith("/projects"))
+        return { status: 201, body: { id: "proj_1" } };
       return { status: 201, body: { id: "run_1" } };
     });
     renderForm();
@@ -67,9 +86,13 @@ describe("NewProjectForm", () => {
     await fillAndSubmit("Un rapport des heures par équipe");
 
     await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/runs/run_1"));
-    const runCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/runs"));
+    const runCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith("/runs"),
+    );
     expect(runCall?.[0]).toBe("/api/v1/projects/proj_1/runs");
-    expect(new Headers(runCall?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
+    expect(
+      new Headers(runCall?.[1]?.headers).get("Idempotency-Key"),
+    ).toBeTruthy();
     expect(JSON.parse(String(runCall?.[1]?.body))).toEqual({
       request: "Un rapport des heures par équipe",
     });
@@ -78,11 +101,16 @@ describe("NewProjectForm", () => {
   it("explains why the factory refused the run", async () => {
     serve((url) => {
       if (url.endsWith("/recipes")) return { status: 200, body: recipes };
-      if (url.endsWith("/projects")) return { status: 201, body: { id: "proj_1" } };
+      if (url.endsWith("/projects"))
+        return { status: 201, body: { id: "proj_1" } };
       return {
         status: 409,
         body: {
-          error: { code: "no_model_configured", message: "Aucun moteur IA configuré.", details: null },
+          error: {
+            code: "no_model_configured",
+            message: "Aucun moteur IA configuré.",
+            details: null,
+          },
         },
       };
     });
@@ -90,7 +118,9 @@ describe("NewProjectForm", () => {
 
     await fillAndSubmit("Un rapport");
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Aucun moteur IA configuré.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Aucun moteur IA configuré.",
+    );
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -99,6 +129,8 @@ describe("NewProjectForm", () => {
     renderForm();
 
     await screen.findByRole("radio", { name: /Classeur Excel/ });
-    expect(screen.getByRole("button", { name: "Lancer la fabrication" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Lancer la fabrication" }),
+    ).toBeDisabled();
   });
 });

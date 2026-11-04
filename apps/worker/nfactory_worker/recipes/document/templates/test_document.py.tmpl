@@ -55,3 +55,7 @@ def test_items_to_complete_are_carried_over(document: DocxDocument) -> None:
     source = SOURCE.read_text(encoding="utf-8").count("À compléter")
     rendered = sum(p.text.count("À compléter") for p in document.paragraphs)
     assert rendered == source
+
+
+def test_the_document_says_it_was_generated_by_ai(document: DocxDocument) -> None:
+    assert "généré par IA" in document.core_properties.keywords

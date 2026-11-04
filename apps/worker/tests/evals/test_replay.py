@@ -4,6 +4,7 @@ byte-identical; only what holds a clock differs (the workbook's creation date, t
 JUnit timings), so those two are compared by content."""
 
 import hashlib
+import json
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -16,6 +17,16 @@ from nfactory_worker.runner import LocalRunner
 
 REQUEST = "Un classeur Excel de suivi des dépenses, avec catégorie, montant et date."
 CLOCKED = {".nfactory/junit.xml", "output/depenses.xlsx"}
+# Names its run and hashes the clocked files: compared field by field below.
+MANIFEST = ".nfactory/provenance.json"
+
+
+def _manifest(root: Path) -> dict[str, object]:
+    """The AI-generated manifest without what differs by design between two runs."""
+    manifest = json.loads((root / MANIFEST).read_text(encoding="utf-8"))
+    manifest.pop("run_id")
+    manifest["files"] = [f for f in manifest["files"] if f["path"] not in CLOCKED]
+    return manifest
 
 
 def _files(root: Path) -> dict[str, str]:
@@ -56,9 +67,10 @@ async def test_replaying_a_recipe_rebuilds_the_same_project(tmp_path: Path) -> N
     assert first.workspace and second.workspace and first.workspace != second.workspace
     a, b = _files(first.workspace), _files(second.workspace)
     assert set(a) == set(b) and CLOCKED <= set(a)
-    assert {k: v for k, v in a.items() if k not in CLOCKED} == {
-        k: v for k, v in b.items() if k not in CLOCKED
+    assert {k: v for k, v in a.items() if k not in CLOCKED | {MANIFEST}} == {
+        k: v for k, v in b.items() if k not in CLOCKED | {MANIFEST}
     }
+    assert _manifest(first.workspace) == _manifest(second.workspace)
     workbook = "output/depenses.xlsx"
     assert _cells(first.workspace / workbook) == _cells(second.workspace / workbook)
     junit = ".nfactory/junit.xml"

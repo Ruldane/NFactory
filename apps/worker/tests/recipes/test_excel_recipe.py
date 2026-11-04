@@ -4,6 +4,7 @@ import zipfile
 
 from openpyxl import load_workbook
 
+from nfactory_worker.artifacts import AI_NOTICE
 from nfactory_worker.brief import Brief
 from nfactory_worker.recipes.excel_automation import ExcelAutomationRecipe
 
@@ -42,6 +43,9 @@ async def test_generated_workbook_is_built_and_verified(run_recipe) -> None:  # 
         names = archive.namelist()
     assert any(name.startswith("xl/charts/") for name in names)
     assert not any("vbaProject" in name for name in names)  # no macros
+    # AI-generated marking in the file's own properties (ADR-0014).
+    assert workbook.properties.description == AI_NOTICE
+    assert "généré par IA" in (workbook.properties.keywords or "")
 
 
 async def test_hostile_title_does_not_break_the_script(run_recipe) -> None:  # type: ignore[no-untyped-def]

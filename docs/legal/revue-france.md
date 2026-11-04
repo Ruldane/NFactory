@@ -136,7 +136,7 @@ Référence CNIL : recommandations sur le développement des systèmes d'IA, fin
 | # | Action | Qui | Quand |
 |---|---|---|---|
 | 1 | Choisir la licence du dépôt et ajouter `LICENSE` | Vous | Avant d'inviter d'autres utilisateurs |
-| 2 | Marquage « généré par IA » des livrables (manifeste + métadonnées) et mention IA dans l'interface | Agent (code, test d'abord) | Avant le 2 décembre 2026 |
+| 2 | Marquage « généré par IA » des livrables (manifeste + métadonnées) et mention IA dans l'interface | Agent (code, test d'abord) | Fait le 3 novembre 2026 (ADR-0014) |
 | 3 | Politique de rétention + export/effacement par membre | Agent (phase 6) | Avec le SSO |
 | 4 | `SECURITY.md`, SBOM et `THIRD_PARTY_NOTICES` en CI | Agent | Phase 6 |
 | 5 | Pays de traitement par fournisseur + option « UE ou local uniquement » | Agent (phase 6) | Phase 6 |

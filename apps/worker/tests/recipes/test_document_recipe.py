@@ -4,6 +4,7 @@ import json
 
 from docx import Document
 
+from nfactory_worker.artifacts import AI_NOTICE
 from nfactory_worker.brief import Brief, SectionSpec
 from nfactory_worker.recipes.document import DocumentRecipe
 
@@ -65,6 +66,9 @@ async def test_generated_docx_is_built_and_verified(run_recipe) -> None:  # type
     headings = [p.text for p in document.paragraphs if p.style.name == "Heading 1"]
     assert headings == ["Objet", "Étapes", "Contacts"]
     assert document.core_properties.title == brief.title
+    # AI-generated marking in the file's own properties (ADR-0014).
+    assert document.core_properties.comments == AI_NOTICE
+    assert "généré par IA" in document.core_properties.keywords
 
 
 async def test_hostile_text_cannot_break_the_structure(run_recipe) -> None:  # type: ignore[no-untyped-def]

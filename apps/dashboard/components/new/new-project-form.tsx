@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState } from "react";
 
+import { AiNotice } from "@/components/ai-notice";
 import { RecipePicker } from "@/components/new/recipe-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLaunchProject, useRecipes } from "@/lib/api/queries";
@@ -28,7 +29,12 @@ export function NewProjectForm() {
     if (type === null || !ready || launch.isPending) return;
     idempotencyKey.current ??= crypto.randomUUID();
     launch.mutate(
-      { title: title.trim(), type, request: request.trim(), idempotencyKey: idempotencyKey.current },
+      {
+        title: title.trim(),
+        type,
+        request: request.trim(),
+        idempotencyKey: idempotencyKey.current,
+      },
       { onSuccess: (run) => router.push(`/runs/${run.id}`) },
     );
   }
@@ -64,17 +70,30 @@ export function NewProjectForm() {
       </div>
 
       {recipes.error ? (
-        <div role="alert" className="border-l-4 border-coral-deep bg-coral-deep/8 px-5 py-4 text-sm">
+        <div
+          role="alert"
+          className="border-l-4 border-coral-deep bg-coral-deep/8 px-5 py-4 text-sm"
+        >
           {recipes.error.message}
         </div>
       ) : recipes.isPending ? (
-        <Skeleton className="h-48 bg-navy/8" aria-label="Chargement des types de projet" />
+        <Skeleton
+          className="h-48 bg-navy/8"
+          aria-label="Chargement des types de projet"
+        />
       ) : (
-        <RecipePicker recipes={recipes.data.items} value={type} onChange={setType} />
+        <RecipePicker
+          recipes={recipes.data.items}
+          value={type}
+          onChange={setType}
+        />
       )}
 
       {launch.error ? (
-        <div role="alert" className="border-l-4 border-coral-deep bg-coral-deep/8 px-5 py-4 text-sm">
+        <div
+          role="alert"
+          className="border-l-4 border-coral-deep bg-coral-deep/8 px-5 py-4 text-sm"
+        >
           {launch.error.message}
         </div>
       ) : null}
@@ -88,9 +107,15 @@ export function NewProjectForm() {
           {launch.isPending ? "Lancement…" : "Lancer la fabrication"}
         </button>
         <p className="text-sm text-navy/60">
-          Le run analyse le besoin, génère le livrable, le vérifie pour de vrai puis le livre.
+          Le run analyse le besoin, génère le livrable, le vérifie pour de vrai
+          puis le livre.
         </p>
       </div>
+      <AiNotice>
+        Votre demande est traitée par des agents d&apos;IA, avec les moteurs
+        choisis dans Moteurs IA (ou le moteur démo). Le livrable est généré par
+        IA : relisez-le avant tout usage.
+      </AiNotice>
     </form>
   );
 }

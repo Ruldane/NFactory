@@ -4,6 +4,7 @@ formulas against the source data."""
 
 import json
 
+from nfactory_worker.artifacts import AI_NOTICE
 from nfactory_worker.brief import Brief
 from nfactory_worker.recipes.base import RenderedProject
 from nfactory_worker.recipes.checks import pytest_check, python_script, ruff_check
@@ -29,6 +30,7 @@ class ExcelAutomationRecipe:
                 "build_report.py",
                 title=py_literal(brief.title),
                 output_name=py_literal(output_name),
+                ai_notice=py_literal(AI_NOTICE),
             ),
             "data/activite.csv": activity_csv(),
             "data/objectifs.csv": targets_csv(),

@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "content" / "document.md"
 OUTLINE = json.loads((ROOT / "content" / "outline.json").read_text(encoding="utf-8"))
 NUMBERED = re.compile(r"^\d+\.\s+")
+AI_NOTICE = {{ai_notice}}
 
 
 def add_line(document: DocxDocument, line: str) -> None:
@@ -40,7 +41,12 @@ def add_line(document: DocxDocument, line: str) -> None:
 def build(source: Path = SOURCE, output: Path | None = None) -> Path:
     output = output or ROOT / OUTLINE["output"]
     document = Document()
-    document.core_properties.title = OUTLINE["title"]
+    # The file's own properties say that AI generated it (AI Act, article 50).
+    properties = document.core_properties
+    properties.title = OUTLINE["title"]
+    properties.author = "NFactory (IA)"
+    properties.keywords = "généré par IA; NFactory"
+    properties.comments = AI_NOTICE
     for raw in source.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if line:

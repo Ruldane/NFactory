@@ -49,6 +49,8 @@ Connexion (tâche 6.1, ADR-0013) : en mode `local` (défaut), un seul utilisateu
 
 Droits et audit (tâche 5.4, ADR-0011) : chaque route qui modifie quelque chose déclare sa permission (`CanBuild`, `CanApprove`, `CanConfigure`, `CanAudit`), tirée du rôle de l'appelant dans l'espace de travail ; un rôle insuffisant reçoit 403 `forbidden`. Les actions sensibles (annulation, décisions, réglages, moteurs, routage, appairage, publication) écrivent une entrée expurgée dans `audit_log`, rattachée à l'espace. `GET /me`, `GET /approvals` et `GET /audit` alimentent la page « Approbations & audit » du dashboard.
 
+Marquage IA (AI Act art. 50, ADR-0014) : l'étape `package` écrit `.nfactory/provenance.json` (généré par IA, terme IPTC `trainedAlgorithmicMedia`, moteur de chaque rôle, sha256 de chaque fichier, sans horodatage) et le livre dans le ZIP ; les `.xlsx` et `.docx` le disent dans leurs propriétés, les README et `EXPLICATION.md` en toutes lettres ; le dashboard le rappelle au lancement et au-dessus des livrables.
+
 Recettes (tâche 5.5, ADR-0012) : un run livré s'enregistre comme recette de l'espace de travail (`/saved-recipes`) ; la relancer crée un nouveau projet et lance un run par le chemin habituel (`launch_run`), avec les moteurs et les limites du moment.
 
 Pendant un run, le worker tient un bail Redis (`nfactory:run-lease:<id>`, 30 s, renouvelé). Au démarrage du worker et chaque minute, un run `RUNNING` sans bail vivant est libéré du verrou ARQ et reprend à son dernier checkpoint : un worker tué ne bloque pas son run pendant le délai maximal du job.
