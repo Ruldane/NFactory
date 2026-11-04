@@ -65,6 +65,24 @@ def test_ready_choices_pass() -> None:
     check_choice(EmbeddingChoice(), {}, local_only=True)
 
 
+def test_eu_only_refuses_a_remote_embedder_outside_the_eu() -> None:
+    with pytest.raises(EmbeddingUnavailableError) as caught:
+        check_choice(
+            EmbeddingChoice(provider="openai_api", model="embed-x"),
+            CONNECTED,
+            local_only=False,
+            eu_only=True,
+        )
+
+    assert caught.value.code == "eu_only_violation"
+    check_choice(
+        EmbeddingChoice(provider="ollama_local", model="nomic"),
+        CONNECTED,
+        local_only=False,
+        eu_only=True,
+    )
+
+
 def test_model_ids_are_validated() -> None:
     with pytest.raises(ValueError):
         EmbeddingChoice(provider="openai_api", model="bad model; drop")

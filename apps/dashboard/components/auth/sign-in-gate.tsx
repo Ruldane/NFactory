@@ -2,9 +2,11 @@
 
 import { type ReactNode, useState } from "react";
 
+import { DataNotice } from "@/components/auth/data-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/lib/api/access";
 import {
+  type AuthConfig,
   describeAuthError,
   LOGIN_URL,
   useAuthConfig,
@@ -20,15 +22,15 @@ export function SignInGate({ children }: { children: ReactNode }) {
     return <Skeleton className="h-32 bg-navy/8" aria-label="Chargement" />;
   if (config.data?.mode !== "oidc") return children;
   return (
-    <SignedIn provider={config.data.provider ?? "SSO"}>{children}</SignedIn>
+    <SignedIn config={config.data}>{children}</SignedIn>
   );
 }
 
 function SignedIn({
-  provider,
+  config,
   children,
 }: {
-  provider: string;
+  config: AuthConfig;
   children: ReactNode;
 }) {
   const me = useMe();
@@ -36,7 +38,7 @@ function SignedIn({
   if (me.isPending)
     return <Skeleton className="h-32 bg-navy/8" aria-label="Chargement" />;
   if (me.error instanceof ApiError && me.error.status === 401)
-    return <SignInScreen provider={provider} />;
+    return <SignInScreen config={config} />;
   return (
     <>
       <div className="mb-8 flex flex-wrap items-center justify-end gap-3 text-sm text-navy/70">
@@ -58,7 +60,8 @@ function SignedIn({
   );
 }
 
-function SignInScreen({ provider }: { provider: string }) {
+function SignInScreen({ config }: { config: AuthConfig }) {
+  const provider = config.provider ?? "SSO";
   // Read once from the address the callback sent us back to (`/?auth_error=…`).
   const [error] = useState(() =>
     describeAuthError(
@@ -93,6 +96,11 @@ function SignInScreen({ provider }: { provider: string }) {
       >
         Se connecter avec {provider}
       </a>
+      <DataNotice
+        provider={provider}
+        sessionHours={config.session_hours ?? null}
+        contact={config.privacy_contact ?? null}
+      />
     </section>
   );
 }

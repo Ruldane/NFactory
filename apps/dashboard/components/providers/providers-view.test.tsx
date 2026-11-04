@@ -19,8 +19,11 @@ const base = (kind: string, label: string, extra: Partial<ProviderView> = {}): P
   key_source: null,
   env_key: null,
   env_key_available: false,
-  regions: [{ id: "global", label: "Mondial", needs_workspace: false }],
+  regions: [
+    { id: "global", label: "Mondial", needs_workspace: false, zone: "outside_eu", country: "États-Unis" },
+  ],
   region: null,
+  residency: { zone: "outside_eu", country: "États-Unis", source: "https://openai.example/data", note: "" },
   workspace_id: null,
   custom_url: false,
   base_url: null,
@@ -41,9 +44,27 @@ const PROVIDERS: ProviderView[] = [
   base("qwen_api", "Alibaba Qwen", {
     discovery: false,
     regions: [
-      { id: "eu-central-1", label: "Allemagne (Francfort) — espace dédié", needs_workspace: true },
-      { id: "legacy-intl", label: "Singapour — domaine DashScope historique", needs_workspace: false },
+      {
+        id: "eu-central-1",
+        label: "Allemagne (Francfort) — espace dédié",
+        needs_workspace: true,
+        zone: "eu",
+        country: "Allemagne",
+      },
+      {
+        id: "legacy-intl",
+        label: "Singapour — domaine DashScope historique",
+        needs_workspace: false,
+        zone: "outside_eu",
+        country: "Singapour",
+      },
     ],
+    residency: {
+      zone: "eu",
+      country: "Allemagne",
+      source: "https://qwen.example/eu",
+      note: "Seulement si l'espace Model Studio a la portée « UE ».",
+    },
   }),
   base("ollama_local", "Ollama (local)", {
     family: "local",
@@ -52,6 +73,7 @@ const PROVIDERS: ProviderView[] = [
     regions: [],
     status: "connected",
     base_url: "http://127.0.0.1:11434",
+    residency: { zone: "local", country: "Votre machine ou votre réseau", source: "", note: "" },
   }),
   base("codex_local", "OpenAI Codex (local)", {
     family: "coding_agent",
@@ -79,7 +101,7 @@ function serve(handler: Handler = () => undefined) {
     if (path.endsWith("/models")) return reply({ models: [] });
     if (path.endsWith("/routing")) {
       return reply({
-        routing: { default: null, roles: {}, fallback: "ask_user", local_only: false },
+        routing: { default: null, roles: {}, fallback: "ask_user", local_only: false, eu_only: false },
         roles: [{ id: "requirements", label: "Analyste des besoins" }],
       });
     }
@@ -113,6 +135,26 @@ describe("ProvidersView", () => {
     const deepseek = await card("DeepSeek");
     expect(deepseek.getByText("Clé refusée")).toBeVisible();
     expect(deepseek.getByText(/clé refusée ou accès non autorisé/)).toBeVisible();
+  });
+
+  it("says where each engine processes the data, with its source and condition", async () => {
+    serve();
+    renderView();
+
+    const openai = await card("OpenAI");
+    expect(openai.getByText("▲ Hors UE · États-Unis")).toBeVisible();
+    expect(openai.getByRole("link", { name: "Source" })).toHaveAttribute(
+      "href",
+      "https://openai.example/data",
+    );
+    expect((await card("Ollama (local)")).getByText("⌂ Local · Votre machine ou votre réseau")).toBeVisible();
+    const qwen = await card("Alibaba Qwen");
+    expect(qwen.getByText("● UE · Allemagne")).toBeVisible();
+    expect(qwen.getByText(/portée « UE »/)).toBeVisible();
+    expect(qwen.getByRole("option", { name: "Allemagne (Francfort) — espace dédié · UE" })).toBeInTheDocument();
+    expect(
+      qwen.getByRole("option", { name: "Singapour — domaine DashScope historique · Hors UE" }),
+    ).toBeInTheDocument();
   });
 
   it("shows the local tools through the bridge, not as API providers", async () => {

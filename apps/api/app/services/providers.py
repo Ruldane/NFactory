@@ -7,7 +7,7 @@ A connection becomes "connected" only after a successful test the user asked for
 import os
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -20,6 +20,7 @@ from app.schemas.providers import (
     ProvidersOut,
     ProviderView,
     RegionOut,
+    ResidencyOut,
     ValidationOut,
 )
 from app.services import model_catalog
@@ -41,6 +42,7 @@ from nfactory_core.providers import (
     resolve_base_url,
     url_policy,
 )
+from nfactory_core.providers.residency import residency
 from nfactory_core.providers.ssrf import Resolver
 from nfactory_core.secrets import SecretKeyMissingError, SecretStore, SecretUnreadableError
 
@@ -287,10 +289,17 @@ def _view(spec: ProviderSpec, row: ProviderConnection | None, deps: ProviderDeps
         env_key=spec.env_key,
         env_key_available=bool(spec.env_key and deps.env.get(spec.env_key)),
         regions=[
-            RegionOut(id=r.id, label=r.label, needs_workspace="{workspace_id}" in r.base_url)
+            RegionOut(
+                id=r.id,
+                label=r.label,
+                needs_workspace="{workspace_id}" in r.base_url,
+                zone=residency(spec.kind, r.id).zone,
+                country=residency(spec.kind, r.id).country,
+            )
             for r in spec.regions
         ],
         region=config.get("region"),
+        residency=ResidencyOut(**asdict(residency(spec.kind, config.get("region")))),
         workspace_id=config.get("workspace_id"),
         custom_url=spec.custom_url,
         base_url=base_url,

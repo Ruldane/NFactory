@@ -75,7 +75,13 @@ async def test_local_mode_needs_no_sign_in(client: AsyncClient) -> None:
 
 async def test_sso_mode_closes_every_route_but_health_and_sign_in(sso_client: AsyncClient) -> None:
     config = (await sso_client.get("/api/v1/auth/config")).json()
-    assert config == {"mode": "oidc", "provider": "Google"}
+    # What the sign-in screen tells the user (legal review §2, information).
+    assert config == {
+        "mode": "oidc",
+        "provider": "Google",
+        "session_hours": 12,
+        "privacy_contact": "dpo@example.fr",
+    }
     assert (await sso_client.get("/api/v1/health")).status_code == 200
 
     for path in ("/api/v1/projects", "/api/v1/me", "/api/v1/settings", "/api/v1/recipes"):

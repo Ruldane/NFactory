@@ -46,7 +46,9 @@ class DatabaseKnowledge:
                     facts = connection_facts(
                         await workspace_connections(session, self._scope.workspace_id)
                     )
-                    check_choice(choice, facts, local_only=routing.local_only)
+                    check_choice(
+                        choice, facts, local_only=routing.local_only, eu_only=routing.eu_only
+                    )
                     embedder = await open_embedder(
                         session,
                         self._scope.workspace_id,

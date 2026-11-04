@@ -6,6 +6,7 @@
 import { type FormEvent, useId, useState } from "react";
 
 import { ModelCatalog } from "@/components/providers/model-catalog";
+import { regionOption, ResidencyNote } from "@/components/providers/residency-note";
 import { ProviderStatusBadge } from "@/components/providers/status-badge";
 import { ALERT, DANGER, FIELD, KICKER, PRIMARY, SECONDARY } from "@/components/ui/form-styles";
 import { useConfigureProvider, useRemoveProvider, useValidateProvider } from "@/lib/api/providers";
@@ -47,6 +48,7 @@ export function ProviderCard({ provider }: { provider: ProviderView }) {
           </a>
         ) : null}
       </header>
+      <ResidencyNote residency={provider.residency} />
       {provider.available ? (
         <ProviderBody provider={provider} />
       ) : (
@@ -148,7 +150,7 @@ function ProviderBody({ provider }: { provider: ProviderView }) {
             >
               {provider.regions.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.label}
+                  {regionOption(r)}
                 </option>
               ))}
             </select>

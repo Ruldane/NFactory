@@ -6,7 +6,8 @@ switches engine on its own: on failure it asks the user (`fallback="ask_user"`) 
 fails (`"none"`).
 
 Interface: `ROLES`, `ROLE_LABELS`, `Route`, `RoutingConfig`, `ConnectionFacts`,
-`freeze_routing`, `demo_routing`, `engines`, `RoutingError`, `DEMO_PROVIDER`, `DEMO_MODEL_ID`.
+`freeze_routing`, `policy_violation`, `demo_routing`, `engines`, `RoutingError`, `DEMO_PROVIDER`,
+`DEMO_MODEL_ID`.
 """
 
 from collections.abc import Callable, Mapping
@@ -15,6 +16,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from nfactory_core.providers.residency import Zone
 from nfactory_core.providers.specs import SPECS, label
 
 # The agents that call a model; builder and tester are deterministic (recipes, runner).
@@ -58,6 +60,8 @@ class RoutingConfig(BaseModel):
     roles: dict[str, Route] = Field(default_factory=dict)
     fallback: FallbackMode = "ask_user"
     local_only: bool = False
+    # Data policy (legal review §2): remote engines must process in the EU/EEA.
+    eu_only: bool = False
 
     @field_validator("roles")
     @classmethod
@@ -80,6 +84,8 @@ class ConnectionFacts:
     kind: str
     status: str
     local: bool
+    zone: Zone = "unknown"  # where a remote engine processes the data
+    country: str = ""
 
 
 class RoutingError(Exception):
@@ -111,12 +117,9 @@ def freeze_routing(
                 f"{label(route.provider)} n'est pas connecté : testez la connexion dans "
                 "Moteurs IA avant de lancer un run.",
             )
-        if config.local_only and not facts.local:
-            raise RoutingError(
-                "local_only_violation",
-                f"Mode « local uniquement » : {label(route.provider)} est un service distant. "
-                "Choisissez un moteur local ou désactivez ce mode.",
-            )
+        violation = policy_violation(facts, local_only=config.local_only, eu_only=config.eu_only)
+        if violation is not None:
+            raise violation
         routes[role] = {
             "provider": route.provider,
             "model": route.model,
@@ -127,7 +130,34 @@ def freeze_routing(
         "routes": routes,
         "fallback": config.fallback,
         "local_only": config.local_only,
+        "eu_only": config.eu_only,
     }
+
+
+def policy_violation(
+    facts: ConnectionFacts, *, local_only: bool, eu_only: bool
+) -> RoutingError | None:
+    """Why the workspace's data policy refuses this engine, or None."""
+    name = label(facts.kind)
+    if local_only and not facts.local:
+        return RoutingError(
+            "local_only_violation",
+            f"Mode « local uniquement » : {name} est un service distant. "
+            "Choisissez un moteur local ou désactivez ce mode.",
+        )
+    if eu_only and not facts.local and facts.zone != "eu":
+        where = (
+            f"hors de l'Union européenne ({facts.country})"
+            if facts.zone == "outside_eu"
+            else "dans un pays non documenté"
+        )
+        return RoutingError(
+            "eu_only_violation",
+            f"Politique « UE ou local uniquement » : {name} traite les données {where}. "
+            "Choisissez un moteur hébergé dans l'UE ou local, ou changez cette politique "
+            "dans Moteurs IA.",
+        )
+    return None
 
 
 def demo_routing() -> dict[str, Any]:
@@ -138,6 +168,7 @@ def demo_routing() -> dict[str, Any]:
         "routes": {role: dict(route) for role in ROLES},
         "fallback": "none",
         "local_only": True,
+        "eu_only": False,
     }
 
 

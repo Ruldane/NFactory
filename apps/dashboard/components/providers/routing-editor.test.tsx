@@ -16,7 +16,7 @@ const PROVIDERS = [
 ];
 
 const VIEW: RoutingView = {
-  routing: { default: null, roles: {}, fallback: "ask_user", local_only: false },
+  routing: { default: null, roles: {}, fallback: "ask_user", local_only: false, eu_only: false },
   roles: [
     { id: "requirements", label: "Analyste des besoins" },
     { id: "reviewer", label: "Relecteur" },
@@ -70,6 +70,7 @@ describe("RoutingEditor", () => {
     await userEvent.type(screen.getByLabelText("Modèle — Relecteur"), "llama-local");
     await userEvent.click(screen.getByLabelText(/Arrêter le run en échec/));
     await userEvent.click(screen.getByLabelText(/Local uniquement/));
+    await userEvent.click(screen.getByLabelText(/UE ou local uniquement/));
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer le routage" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Routage enregistré");
@@ -80,6 +81,7 @@ describe("RoutingEditor", () => {
       roles: { reviewer: { provider: "ollama_local", model: "llama-local" } },
       fallback: "none",
       local_only: true,
+      eu_only: true,
     });
   });
 

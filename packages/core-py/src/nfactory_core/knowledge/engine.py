@@ -23,7 +23,7 @@ from nfactory_core.knowledge.embedders import (
 )
 from nfactory_core.providers import SPECS
 from nfactory_core.providers.ssrf import Resolver, system_resolver
-from nfactory_core.routing import ConnectionFacts
+from nfactory_core.routing import ConnectionFacts, policy_violation
 from nfactory_core.secrets import SecretStore
 
 POLICY_KEY = "knowledge"
@@ -65,7 +65,11 @@ def embedding_choice(data_policy: Mapping[str, Any] | None) -> EmbeddingChoice:
 
 
 def check_choice(
-    choice: EmbeddingChoice, connections: Mapping[str, ConnectionFacts], *, local_only: bool
+    choice: EmbeddingChoice,
+    connections: Mapping[str, ConnectionFacts],
+    *,
+    local_only: bool,
+    eu_only: bool = False,
 ) -> None:
     if choice.provider == LOCAL_PROVIDER:
         if choice.model != LOCAL_MODEL:
@@ -85,11 +89,9 @@ def check_choice(
             "provider_not_ready",
             f"{spec.label} n'est pas connecté : testez sa connexion dans Moteurs IA.",
         )
-    if local_only and not spec.local:
-        raise EmbeddingUnavailableError(
-            "local_only_violation",
-            f"Mode local uniquement : {spec.label} est un service distant.",
-        )
+    violation = policy_violation(facts, local_only=local_only, eu_only=eu_only)
+    if violation is not None:
+        raise EmbeddingUnavailableError(violation.code, violation.message)
 
 
 async def open_embedder(

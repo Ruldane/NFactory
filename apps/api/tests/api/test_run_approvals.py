@@ -19,13 +19,16 @@ KEY = "sk-approval-test-0123456789abcdefghijkl"
 OPENAI = "https://api.openai.com/v1"
 
 
-def routed(model: str = "model-x", *, local_only: bool = False) -> dict[str, Any]:
+def routed(
+    model: str = "model-x", *, local_only: bool = False, eu_only: bool = False
+) -> dict[str, Any]:
     route = {"provider": "openai_api", "model": model, "pricing": None}
     return {
         "mode": "routed",
         "routes": {role: dict(route) for role in ROLES},
         "fallback": "ask_user",
         "local_only": local_only,
+        "eu_only": eu_only,
     }
 
 
@@ -144,6 +147,20 @@ async def test_a_replacement_must_respect_local_only(
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "local_only_violation"
+
+
+async def test_a_replacement_must_respect_the_eu_only_policy_of_the_run(
+    provider_client: AsyncClient, migrated_database_url: str
+) -> None:
+    run_id, approval_id = await paused_run(provider_client, migrated_database_url, eu_only=True)
+
+    response = await provider_client.post(
+        f"/api/v1/runs/{run_id}/approvals/{approval_id}/approve",
+        json={"provider": "openai_api", "model": "model-y"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "eu_only_violation"
 
 
 async def test_a_decision_is_taken_only_once(

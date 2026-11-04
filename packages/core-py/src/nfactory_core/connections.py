@@ -18,6 +18,7 @@ from nfactory_core.providers import (
     build_provider,
     resolve_base_url,
 )
+from nfactory_core.providers.residency import residency
 from nfactory_core.providers.ssrf import Resolver, system_resolver
 from nfactory_core.routing import ConnectionFacts
 from nfactory_core.secrets import SecretStore
@@ -83,8 +84,16 @@ async def workspace_connections(
 
 
 def connection_facts(rows: Mapping[str, ProviderConnection]) -> dict[str, ConnectionFacts]:
-    return {
-        kind: ConnectionFacts(kind=kind, status=row.status, local=SPECS[kind].local)
-        for kind, row in rows.items()
-        if kind in SPECS
-    }
+    facts: dict[str, ConnectionFacts] = {}
+    for kind, row in rows.items():
+        if kind not in SPECS:
+            continue
+        where = residency(kind, (row.config_non_secret or {}).get("region"))
+        facts[kind] = ConnectionFacts(
+            kind=kind,
+            status=row.status,
+            local=SPECS[kind].local,
+            zone=where.zone,
+            country=where.country,
+        )
+    return facts

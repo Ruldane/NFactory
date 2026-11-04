@@ -46,7 +46,7 @@ async def index_workspace(sessions: Sessions, workspace_id: str, settings: Setti
             policy = workspace.data_policy or {}
             routing = RoutingConfig.model_validate(policy.get("routing") or {})
             facts = connection_facts(await workspace_connections(session, workspace_id))
-            check_choice(choice, facts, local_only=routing.local_only)
+            check_choice(choice, facts, local_only=routing.local_only, eu_only=routing.eu_only)
             embedder = await open_embedder(
                 session,
                 workspace_id,

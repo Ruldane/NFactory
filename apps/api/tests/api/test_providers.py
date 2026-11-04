@@ -42,6 +42,28 @@ async def test_every_provider_is_listed_unconfigured_and_coding_agents_wait_for_
     assert qwen["eu-central-1"] is True and qwen["legacy-intl"] is False
 
 
+async def test_each_provider_and_region_says_where_it_processes_data(
+    provider_client: AsyncClient,
+) -> None:
+    body = (await provider_client.get("/api/v1/providers")).json()
+    views = {p["kind"]: p for p in body["providers"]}
+
+    assert views["openai_api"]["residency"]["zone"] == "outside_eu"
+    assert views["openai_api"]["residency"]["source"].startswith("https://")
+    assert views["ollama_local"]["residency"]["zone"] == "local"
+    assert views["custom_openai_compatible"]["residency"]["zone"] == "unknown"
+    frankfurt = next(r for r in views["qwen_api"]["regions"] if r["id"] == "eu-central-1")
+    assert (frankfurt["zone"], frankfurt["country"]) == ("eu", "Allemagne")
+
+    await configure(
+        provider_client, "qwen_api", api_key=KEY, region="eu-central-1", workspace_id="ws-abc123"
+    )
+    saved = {
+        p["kind"]: p for p in (await provider_client.get("/api/v1/providers")).json()["providers"]
+    }
+    assert saved["qwen_api"]["residency"]["country"] == "Allemagne"
+
+
 async def test_a_saved_key_is_encrypted_never_returned_and_not_yet_connected(
     provider_client: AsyncClient, migrated_database_url: str
 ) -> None:

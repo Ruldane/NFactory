@@ -118,7 +118,7 @@ async def settings_view(session: AsyncSession, ctx: RequestContext) -> Knowledge
     index_error = ((workspace.data_policy or {}).get(POLICY_KEY) or {}).get("index_error")
     status = await index_status(session, ctx.default_workspace_id, choice.key)
     facts = connection_facts(await workspace_connections(session, ctx.default_workspace_id))
-    local_only = (await routing_config(session, ctx.default_workspace_id)).local_only
+    routing = await routing_config(session, ctx.default_workspace_id)
     options = [
         EngineOption(
             provider=LOCAL_PROVIDER,
@@ -133,7 +133,10 @@ async def settings_view(session: AsyncSession, ctx: RequestContext) -> Knowledge
         reason = None
         try:
             check_choice(
-                EmbeddingChoice(provider=kind, model="probe"), facts, local_only=local_only
+                EmbeddingChoice(provider=kind, model="probe"),
+                facts,
+                local_only=routing.local_only,
+                eu_only=routing.eu_only,
             )
         except EmbeddingUnavailableError as exc:
             reason = exc.message
@@ -193,9 +196,9 @@ async def _active_key(session: AsyncSession, ctx: RequestContext) -> str:
 
 async def _check(session: AsyncSession, ctx: RequestContext, choice: EmbeddingChoice) -> None:
     facts = connection_facts(await workspace_connections(session, ctx.default_workspace_id))
-    local_only = (await routing_config(session, ctx.default_workspace_id)).local_only
+    routing = await routing_config(session, ctx.default_workspace_id)
     try:
-        check_choice(choice, facts, local_only=local_only)
+        check_choice(choice, facts, local_only=routing.local_only, eu_only=routing.eu_only)
     except EmbeddingUnavailableError as exc:
         raise AppError(_ENGINE_STATUS.get(exc.code, 409), exc.code, exc.message) from None
 
@@ -204,8 +207,8 @@ async def _embedder(
     session: AsyncSession, ctx: RequestContext, deps: ProviderDeps, choice: EmbeddingChoice
 ) -> Embedder:
     facts = connection_facts(await workspace_connections(session, ctx.default_workspace_id))
-    local_only = (await routing_config(session, ctx.default_workspace_id)).local_only
-    check_choice(choice, facts, local_only=local_only)
+    routing = await routing_config(session, ctx.default_workspace_id)
+    check_choice(choice, facts, local_only=routing.local_only, eu_only=routing.eu_only)
     return await open_embedder(
         session,
         ctx.default_workspace_id,

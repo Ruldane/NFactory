@@ -5,7 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { accessKeys } from "@/lib/api/access";
 import { apiGet, apiPost } from "@/lib/api/client";
 
-export type AuthConfig = { mode: "local" | "oidc"; provider: string | null };
+export type AuthConfig = {
+  mode: "local" | "oidc";
+  provider: string | null;
+  // SSO mode only: what the sign-in screen tells the user about their data.
+  session_hours?: number;
+  privacy_contact?: string | null;
+};
 
 export const LOGIN_URL = "/api/v1/auth/login";
 

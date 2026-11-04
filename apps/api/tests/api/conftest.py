@@ -114,6 +114,7 @@ SSO_SETTINGS: dict[str, object] = {
     "nfactory_oidc_allowed_domains": "example.fr",
     "nfactory_oidc_allowed_emails": "grace@gmail.com",
     "nfactory_oidc_owner_emails": "ada@example.fr",
+    "nfactory_privacy_contact": "dpo@example.fr",
 }
 
 

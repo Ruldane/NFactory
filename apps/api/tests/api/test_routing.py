@@ -37,6 +37,7 @@ async def test_routing_starts_empty_with_ask_user_fallback(provider_client: Asyn
         "roles": {},
         "fallback": "ask_user",
         "local_only": False,
+        "eu_only": False,
     }
     assert [r["id"] for r in body["roles"]][:2] == ["requirements", "planner"]
 
@@ -96,6 +97,23 @@ async def test_a_routed_run_freezes_its_engines_and_is_not_demo(
     await provider_client.put("/api/v1/routing", json={})
     again = (await provider_client.get(f"/api/v1/runs/{run['id']}")).json()
     assert again["engines"]["reviewer"]["provider"] == "openai_api"
+
+
+async def test_eu_only_refuses_an_engine_outside_the_eu_at_launch(
+    provider_client: AsyncClient,
+) -> None:
+    await connect_openai(provider_client)
+    await provider_client.put(
+        "/api/v1/routing",
+        json={"default": {"provider": "openai_api", "model": "model-x"}, "eu_only": True},
+    )
+
+    response = await launch(provider_client, await new_project(provider_client))
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "eu_only_violation"
+    assert "États-Unis" in error["message"]
 
 
 async def test_local_only_refuses_a_remote_engine_at_launch(provider_client: AsyncClient) -> None:

@@ -186,6 +186,23 @@ async def test_a_task_starts_only_with_consent(http, bridge) -> None:  # type: i
     assert bridge.started == [START]
 
 
+@pytest.mark.parametrize(
+    ("policy", "code"), [("eu_only", "eu_only_violation"), ("local_only", "local_only_violation")]
+)
+async def test_the_data_policy_keeps_coding_agents_off(
+    http, bridge, policy: str, code: str
+) -> None:  # type: ignore[no-untyped-def]
+    await paired(http)
+    assert (await http.put("/api/v1/routing", json={policy: True})).status_code == 200
+
+    codex = await http.post("/api/v1/local-runtimes/tasks", json=START)
+    claude = await http.post("/api/v1/local-runtimes/tasks", json={**START, "runtime": "claude"})
+
+    assert (codex.status_code, codex.json()["error"]["code"]) == (409, code)
+    assert claude.status_code == 409
+    assert bridge.started == []
+
+
 async def test_the_task_view_is_bounded_and_redacted(http) -> None:  # type: ignore[no-untyped-def]
     await paired(http)
 

@@ -36,12 +36,18 @@ def _provider_label(settings: Settings) -> str:
 
 
 @router.get("/config")
-async def config(request: Request) -> dict[str, str | None]:
-    """How the dashboard should sign in: no sign-in at all in local mode."""
+async def config(request: Request) -> dict[str, str | int | None]:
+    """How the dashboard should sign in: no sign-in at all in local mode. In SSO mode,
+    also what the sign-in screen must tell the user (GDPR art. 13)."""
     settings = _settings(request)
     if settings.nfactory_auth_mode == "local":
         return {"mode": "local", "provider": None}
-    return {"mode": "oidc", "provider": _provider_label(settings)}
+    return {
+        "mode": "oidc",
+        "provider": _provider_label(settings),
+        "session_hours": settings.nfactory_session_ttl_hours,
+        "privacy_contact": settings.nfactory_privacy_contact.strip() or None,
+    }
 
 
 @router.get("/login")

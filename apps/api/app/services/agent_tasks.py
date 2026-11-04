@@ -41,8 +41,11 @@ from app.services.local_runtimes import (
     BridgeUnreachable,
     paired_token,
 )
+from app.services.routing import routing_config
 from nfactory_core.events.redaction import redact
 from nfactory_core.models import AgentCheck, AuditLog
+from nfactory_core.providers.residency import residency
+from nfactory_core.routing import ConnectionFacts, policy_violation
 from nfactory_core.secrets import SecretStore
 
 Action = Literal["cancel", "discard", "collect"]
@@ -70,8 +73,26 @@ async def start(
     store: SecretStore,
     data: AgentTaskIn,
 ) -> AgentTaskOut:
+    await _check_data_policy(session, ctx, data.runtime)
     token = await _token(session, ctx, store)
     return _task(await _relay(bridge.start_task(token, data.model_dump())))
+
+
+_AGENT_KIND = {"codex": "codex_local", "claude": "claude_code_local"}
+
+
+async def _check_data_policy(session: AsyncSession, ctx: RequestContext, runtime: str) -> None:
+    """A coding agent sends the repository to its vendor's cloud: the workspace's data
+    policy (local only, EU or local only) applies to it like to any remote engine."""
+    routing = await routing_config(session, ctx.default_workspace_id)
+    kind = _AGENT_KIND[runtime]
+    where = residency(kind)
+    facts = ConnectionFacts(
+        kind=kind, status="connected", local=False, zone=where.zone, country=where.country
+    )
+    violation = policy_violation(facts, local_only=routing.local_only, eu_only=routing.eu_only)
+    if violation is not None:
+        raise AppError(409, violation.code, violation.message)
 
 
 async def get(

@@ -21,7 +21,7 @@ from nfactory_core.connections import connection_facts, workspace_connections
 from nfactory_core.events import record_event
 from nfactory_core.models import Approval, Project, Run
 from nfactory_core.providers import label
-from nfactory_core.routing import Route
+from nfactory_core.routing import Route, policy_violation
 from nfactory_core.states import RunState, StepState, transition
 
 
@@ -120,12 +120,13 @@ async def _replacement_route(
             "provider_not_ready",
             f"{label(route.provider)} n'est pas connecté : testez la connexion dans Moteurs IA.",
         )
-    if config.get("local_only") and not fact.local:
-        raise AppError(
-            409,
-            "local_only_violation",
-            f"Ce run est en mode « local uniquement » : {label(route.provider)} est distant.",
-        )
+    violation = policy_violation(
+        fact,
+        local_only=bool(config.get("local_only")),
+        eu_only=bool(config.get("eu_only")),
+    )
+    if violation is not None:
+        raise AppError(409, violation.code, violation.message)
     return {
         "provider": route.provider,
         "model": route.model,

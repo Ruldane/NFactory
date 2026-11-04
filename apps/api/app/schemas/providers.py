@@ -12,10 +12,24 @@ from nfactory_core.routing import RoutingConfig
 ConnectionStatus = str
 
 
+Zone = Literal["local", "eu", "outside_eu", "unknown"]
+
+
 class RegionOut(BaseModel):
     id: str
     label: str
     needs_workspace: bool  # the host embeds a workspace id (Qwen dedicated regions)
+    zone: Zone
+    country: str
+
+
+class ResidencyOut(BaseModel):
+    """Where the engine processes data (ADR-0016), for the saved or the default region."""
+
+    zone: Zone
+    country: str
+    source: str
+    note: str  # a condition the user must meet; "" when none
 
 
 class LastError(BaseModel):
@@ -36,6 +50,7 @@ class ProviderView(BaseModel):
     env_key_available: bool
     regions: list[RegionOut]
     region: str | None
+    residency: ResidencyOut
     workspace_id: str | None
     custom_url: bool
     base_url: str | None

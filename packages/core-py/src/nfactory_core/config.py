@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     nfactory_oidc_allowed_emails: str = ""
     nfactory_oidc_owner_emails: str = ""
     nfactory_session_ttl_hours: int = Field(default=12, ge=1, le=720)
+    # Who answers data-protection requests (e-mail or page), shown on the sign-in screen.
+    nfactory_privacy_contact: str = Field(default="", max_length=200)
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

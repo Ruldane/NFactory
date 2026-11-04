@@ -278,8 +278,9 @@ export interface ProviderView {
   key_source: "stored" | "env" | null;
   env_key: string | null;
   env_key_available: boolean;
-  regions: { id: string; label: string; needs_workspace: boolean }[];
+  regions: { id: string; label: string; needs_workspace: boolean; zone: Zone; country: string }[];
   region: string | null;
+  residency: Residency;
   workspace_id: string | null;
   custom_url: boolean;
   base_url: string | null;
@@ -287,6 +288,16 @@ export interface ProviderView {
   docs_url: string;
   last_checked_at: string | null;
   last_error: { kind: string; message: string } | null;
+}
+
+// Where an engine processes data (ADR-0016).
+export type Zone = "local" | "eu" | "outside_eu" | "unknown";
+
+export interface Residency {
+  zone: Zone;
+  country: string;
+  source: string;
+  note: string;
 }
 
 export interface ProviderConfigInput {
@@ -325,6 +336,7 @@ export interface RoutingConfig {
   roles: Record<string, Engine>;
   fallback: Fallback;
   local_only: boolean;
+  eu_only: boolean;
 }
 
 export interface RoutingView {

@@ -12,6 +12,7 @@ from nfactory_core.routing import (
     demo_routing,
     engines,
     freeze_routing,
+    policy_violation,
 )
 
 CONNECTED = {
@@ -86,6 +87,58 @@ def test_local_only_with_local_engines_is_accepted() -> None:
     config = RoutingConfig(default=Route(provider="ollama_local", model="m"), local_only=True)
 
     assert freeze_routing(config, CONNECTED, price)["local_only"] is True
+
+
+US = ConnectionFacts(
+    kind="openai_api", status="connected", local=False, zone="outside_eu", country="États-Unis"
+)
+FRANKFURT = ConnectionFacts(
+    kind="qwen_api", status="connected", local=False, zone="eu", country="Allemagne"
+)
+UNDOCUMENTED = ConnectionFacts(kind="custom_openai_compatible", status="connected", local=False)
+
+
+def test_eu_only_refuses_an_engine_processing_outside_the_eu() -> None:
+    config = RoutingConfig(default=Route(provider="openai_api", model="m"), eu_only=True)
+
+    with pytest.raises(RoutingError) as caught:
+        freeze_routing(config, {"openai_api": US}, price)
+
+    assert caught.value.code == "eu_only_violation"
+    assert "OpenAI" in caught.value.message and "États-Unis" in caught.value.message
+
+
+def test_eu_only_refuses_an_engine_whose_country_is_not_documented() -> None:
+    config = RoutingConfig(
+        default=Route(provider="custom_openai_compatible", model="m"), eu_only=True
+    )
+
+    with pytest.raises(RoutingError) as caught:
+        freeze_routing(config, {"custom_openai_compatible": UNDOCUMENTED}, price)
+
+    assert caught.value.code == "eu_only_violation"
+    assert "non documenté" in caught.value.message
+
+
+def test_eu_only_accepts_eu_and_local_engines_and_is_frozen() -> None:
+    config = RoutingConfig(
+        default=Route(provider="qwen_api", model="m"),
+        roles={"planner": Route(provider="ollama_local", model="m")},
+        eu_only=True,
+    )
+
+    frozen = freeze_routing(config, {**CONNECTED, "qwen_api": FRANKFURT}, price)
+
+    assert frozen["eu_only"] is True
+    assert frozen["routes"]["planner"]["provider"] == "ollama_local"
+
+
+def test_policy_violation_checks_one_engine() -> None:
+    assert policy_violation(US, local_only=False, eu_only=False) is None
+    assert policy_violation(FRANKFURT, local_only=False, eu_only=True) is None
+    local = policy_violation(FRANKFURT, local_only=True, eu_only=True)
+    assert local is not None and local.code == "local_only_violation"
+    assert demo_routing()["eu_only"] is False
 
 
 def test_empty_routing_is_not_configured() -> None:

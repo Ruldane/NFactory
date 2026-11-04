@@ -83,7 +83,10 @@ SPECS: dict[str, ProviderSpec] = {
     for spec in (
         ProviderSpec(
             "openai_api", "OpenAI", "api", "openai", 2, "OPENAI_API_KEY",
-            (Region("global", "Mondial", "https://api.openai.com/v1"),),
+            (
+                Region("global", "Mondial", "https://api.openai.com/v1"),
+                Region("eu", "Europe — résidence des données", "https://eu.api.openai.com/v1"),
+            ),
             docs_url="https://developers.openai.com/api/reference/overview",
             embeddings=True,
         ),

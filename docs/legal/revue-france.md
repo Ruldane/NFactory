@@ -39,7 +39,9 @@
    - suppression d'un projet avec ses artefacts et ses vecteurs.
    - *Fait (ADR-0015) : export JSON par le membre, effacement (anonymisation) par un administrateur, suppression d'un projet.*
 3. **Information** : un texte court sur l'écran de connexion SSO (quelles données, pourquoi, combien de temps).
+   - *Fait : bloc « Vos données » sur l'écran de connexion (données reçues de Google, finalité, durée de session, cookie strictement nécessaire, droits, contact `NFACTORY_PRIVACY_CONTACT`, lien vers la plainte CNIL). Texte complet à publier : `docs/legal/information-sso.md` (brouillon).*
 4. **Modèle de registre des traitements** et, si la base de connaissances contient des données de salariés ou sensibles, une **AIPD**. Ces deux documents sont à fournir au client ; c'est le client qui les tient.
+   - *Brouillon : `docs/legal/registre-des-traitements.md` (5 traitements, sous-traitants à lister). L'AIPD reste à faire par le client si elle s'impose.*
 
 **Transferts hors UE**
 
@@ -51,6 +53,7 @@
   - afficher, dans Moteurs IA, le pays de traitement de chaque fournisseur ;
   - proposer un réglage « données personnelles : moteurs UE ou locaux uniquement » (lié à la phase 6 « politiques provider par workspace ») ;
   - **à vérifier** : la certification DPF et les DPA de chaque fournisseur utilisé.
+  - *Fait (ADR-0016) : pays de traitement sourcé pour chaque fournisseur et région, et politique « UE ou local uniquement », appliquée aux runs, aux embeddings et aux agents de code. Seuls deux points d'accès traitent dans l'UE, chacun sous condition : OpenAI avec un projet en résidence « Europe » (`eu.api.openai.com`), et Qwen Francfort avec un espace en portée « UE ». Anthropic n'a pas d'option UE sur son API.*
 
 Référence CNIL : recommandations sur le développement des systèmes d'IA, finalisées en juillet 2025, et note exploratoire sur l'IA agentique (juillet 2026). Elles portent surtout sur l'entraînement de modèles. NFactory n'entraîne aucun modèle, mais les fiches sur la sécurité et la minimisation s'appliquent.
 
@@ -141,8 +144,8 @@ Référence CNIL : recommandations sur le développement des systèmes d'IA, fin
 | 2 | Marquage « généré par IA » des livrables (manifeste + métadonnées) et mention IA dans l'interface | Agent (code, test d'abord) | Fait le 3 novembre 2026 (ADR-0014) |
 | 3 | Politique de rétention + export/effacement par membre | Agent (phase 6) | Fait le 4 novembre 2026 (ADR-0015) |
 | 4 | `SECURITY.md`, SBOM et `THIRD_PARTY_NOTICES` en CI | Agent | Fait le 4 novembre 2026 (job CI `supply-chain`) |
-| 5 | Pays de traitement par fournisseur + option « UE ou local uniquement » | Agent (phase 6) | Phase 6 |
-| 6 | Modèles de registre des traitements et d'information SSO | Agent (brouillon) puis avocat | Avant le premier client |
+| 5 | Pays de traitement par fournisseur + option « UE ou local uniquement » | Agent (phase 6) | Fait le 4 novembre 2026 (ADR-0016) |
+| 6 | Modèles de registre des traitements et d'information SSO | Agent (brouillon) puis avocat | Brouillons faits le 4 novembre 2026 ; relecture par l'avocat à faire |
 | 7 | Revue par un avocat : statut AI Act art. 50(2), CRA, responsabilité du code généré, CGU/CGV, DPA | Avocat | Avant toute vente |
 | 8 | Recherche de marque INPI / EUIPO | Vous ou conseil en propriété industrielle | Avant usage commercial |
 

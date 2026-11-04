@@ -33,6 +33,7 @@ function RoutingForm({ view, connected }: { view: RoutingView; connected: Provid
   );
   const [fallback, setFallback] = useState<Fallback>(view.routing.fallback);
   const [localOnly, setLocalOnly] = useState(view.routing.local_only);
+  const [euOnly, setEuOnly] = useState(view.routing.eu_only);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -41,7 +42,13 @@ function RoutingForm({ view, connected }: { view: RoutingView; connected: Provid
       const engine = toEngine(draft);
       if (engine) overrides[role] = engine;
     }
-    save.mutate({ default: toEngine(defaultEngine), roles: overrides, fallback, local_only: localOnly });
+    save.mutate({
+      default: toEngine(defaultEngine),
+      roles: overrides,
+      fallback,
+      local_only: localOnly,
+      eu_only: euOnly,
+    });
   }
 
   return (
@@ -104,6 +111,11 @@ function RoutingForm({ view, connected }: { view: RoutingView; connected: Provid
       <label className="flex items-center gap-2 text-sm text-navy">
         <input type="checkbox" checked={localOnly} onChange={(e) => setLocalOnly(e.target.checked)} />
         Local uniquement : refuser tout moteur distant au lancement
+      </label>
+      <label className="flex items-center gap-2 text-sm text-navy">
+        <input type="checkbox" checked={euOnly} onChange={(e) => setEuOnly(e.target.checked)} />
+        UE ou local uniquement : refuser tout moteur qui traite les données hors de l&apos;UE ou
+        dans un pays non documenté (runs, base de connaissances, agents de code)
       </label>
       {save.error ? <div role="alert" className={ALERT}>{save.error.message}</div> : null}
       <div className="flex flex-wrap items-center gap-4">

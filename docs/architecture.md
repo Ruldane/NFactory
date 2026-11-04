@@ -51,6 +51,8 @@ Droits et audit (tâche 5.4, ADR-0011) : chaque route qui modifie quelque chose 
 
 Rétention et droits des membres (RGPD, ADR-0015) : chaque espace de travail choisit combien de jours garder les runs terminés et le journal d'audit (rien n'est supprimé par défaut). Chaque nuit à 3 h 15, la tâche `apply_retention` du worker purge les lignes expirées et les sessions de connexion finies, puis balaie les dossiers `run_*` et les points de reprise LangGraph sans run. Un membre télécharge ses données (`GET /me/export`) ; un administrateur efface un membre (`DELETE /members/{id}`, identité anonymisée) ou un projet (`DELETE /projects/{id}`).
 
+Pays de traitement (RGPD, ADR-0016) : chaque fournisseur et région a sa zone (local, UE, hors UE, non documenté), son pays et sa source dans `nfactory_core.providers.residency`, affichés dans Moteurs IA. La politique « UE ou local uniquement » (`eu_only`, à côté de `local_only` dans le routage) refuse tout moteur hors UE ou non documenté au lancement d'un run, au remplacement d'un moteur, pour les embeddings et pour les agents de code.
+
 Marquage IA (AI Act art. 50, ADR-0014) : l'étape `package` écrit `.nfactory/provenance.json` (généré par IA, terme IPTC `trainedAlgorithmicMedia`, moteur de chaque rôle, sha256 de chaque fichier, sans horodatage) et le livre dans le ZIP ; les `.xlsx` et `.docx` le disent dans leurs propriétés, les README et `EXPLICATION.md` en toutes lettres ; le dashboard le rappelle au lancement et au-dessus des livrables.
 
 Recettes (tâche 5.5, ADR-0012) : un run livré s'enregistre comme recette de l'espace de travail (`/saved-recipes`) ; la relancer crée un nouveau projet et lance un run par le chemin habituel (`launch_run`), avec les moteurs et les limites du moment.

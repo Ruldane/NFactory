@@ -28,12 +28,16 @@ const UNAUTHENTICATED = JSON.stringify({
   },
 });
 
-function serve(mode: "local" | "oidc", me: Me | null) {
+function serve(mode: "local" | "oidc", me: Me | null, contact: string | null = null) {
   let signedIn = me;
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.startsWith("/api/v1/auth/config"))
       return new Response(
-        JSON.stringify({ mode, provider: mode === "oidc" ? "Google" : null }),
+        JSON.stringify(
+          mode === "oidc"
+            ? { mode, provider: "Google", session_hours: 12, privacy_contact: contact }
+            : { mode, provider: null },
+        ),
       );
     if (url.startsWith("/api/v1/auth/logout") && init?.method === "POST") {
       signedIn = null;
@@ -85,6 +89,30 @@ describe("SignInGate", () => {
     });
     expect(link).toHaveAttribute("href", "/api/v1/auth/login");
     expect(screen.queryByText("Contenu protégé")).not.toBeInTheDocument();
+  });
+
+  it("tells a visitor what happens to their data before they sign in", async () => {
+    serve("oidc", null, "dpo@example.fr");
+    renderGate();
+
+    const notice = await screen.findByRole("region", { name: "Vos données" });
+    expect(notice).toHaveTextContent(/nom, votre adresse e-mail vérifiée et votre identifiant Google/);
+    expect(notice).toHaveTextContent(/12 h/);
+    expect(notice).toHaveTextContent(/strictement nécessaire/);
+    expect(notice).toHaveTextContent(/dpo@example.fr/);
+    expect(screen.getByRole("link", { name: "CNIL" })).toHaveAttribute(
+      "href",
+      "https://www.cnil.fr/fr/adresser-une-plainte",
+    );
+  });
+
+  it("points to the space's administrator when no privacy contact is set", async () => {
+    serve("oidc", null);
+    renderGate();
+
+    expect(await screen.findByRole("region", { name: "Vos données" })).toHaveTextContent(
+      /administrateur de cet espace/,
+    );
   });
 
   it("says why a sign-in was refused", async () => {
