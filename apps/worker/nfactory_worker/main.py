@@ -2,7 +2,8 @@
 
 Jobs: `ping` (health), `run_factory` (one factory run), `index_knowledge` (the
 missing knowledge vectors of a workspace) and `check_agent_task` (test a coding
-agent's change in the sandbox). Startup prepares the
+agent's change in the sandbox). Nightly, `apply_retention` deletes what each workspace
+chose not to keep (ADR-0015). Startup prepares the
 database session factory and the LangGraph checkpoint tables.
 """
 
@@ -25,6 +26,7 @@ from nfactory_worker.jobs import process_run
 from nfactory_worker.jobs.agent_checks import check_agent_task as run_agent_check
 from nfactory_worker.jobs.indexing import index_pending_workspaces, index_workspace
 from nfactory_worker.jobs.recovery import recover_orphaned_runs, run_lease
+from nfactory_worker.jobs.retention import apply_retention as apply_retention_policy
 from nfactory_worker.runner import LocalRunner, Runner, SandboxRunner
 
 QUEUE_NAME = RUN_QUEUE
@@ -118,6 +120,11 @@ async def recover_runs(ctx: dict[str, Any]) -> list[str]:
     return await recover_orphaned_runs(ctx["sessions"], ctx["redis"])
 
 
+async def apply_retention(ctx: dict[str, Any]) -> int:
+    purge, _sweep = await apply_retention_policy(ctx["sessions"], ctx["settings"])
+    return purge.runs
+
+
 def build_worker_settings(settings: Settings) -> dict[str, Any]:
     return {
         "functions": [ping, run_factory, index_knowledge, check_agent_task],
@@ -127,6 +134,7 @@ def build_worker_settings(settings: Settings) -> dict[str, Any]:
         "cron_jobs": [
             cron(recover_runs, second={0}, run_at_startup=False),
             cron(index_pending, second={30}, run_at_startup=True),
+            cron(apply_retention, hour={3}, minute={15}, run_at_startup=True),
         ],
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
         "queue_name": QUEUE_NAME,

@@ -33,10 +33,11 @@
 
 **Manques à combler (actions techniques)**
 
-1. **Politique de rétention** (déjà prévue en phase 6) : durées configurables par espace de travail, avec purge des runs, événements, documents et entrées d'audit anciennes. Aujourd'hui rien n'est supprimé automatiquement.
+1. **Politique de rétention** : durées configurables par espace de travail, avec purge des runs, événements, documents et entrées d'audit anciennes. *Fait (ADR-0015) : runs terminés et journal d'audit, purge chaque nuit ; rien n'est supprimé tant que le propriétaire n'a pas choisi de durée.*
 2. **Droits des personnes** :
    - export et effacement des données d'un membre ;
    - suppression d'un projet avec ses artefacts et ses vecteurs.
+   - *Fait (ADR-0015) : export JSON par le membre, effacement (anonymisation) par un administrateur, suppression d'un projet.*
 3. **Information** : un texte court sur l'écran de connexion SSO (quelles données, pourquoi, combien de temps).
 4. **Modèle de registre des traitements** et, si la base de connaissances contient des données de salariés ou sensibles, une **AIPD**. Ces deux documents sont à fournir au client ; c'est le client qui les tient.
 
@@ -137,7 +138,7 @@ Référence CNIL : recommandations sur le développement des systèmes d'IA, fin
 |---|---|---|---|
 | 1 | Choisir la licence du dépôt et ajouter `LICENSE` | Vous | Avant d'inviter d'autres utilisateurs |
 | 2 | Marquage « généré par IA » des livrables (manifeste + métadonnées) et mention IA dans l'interface | Agent (code, test d'abord) | Fait le 3 novembre 2026 (ADR-0014) |
-| 3 | Politique de rétention + export/effacement par membre | Agent (phase 6) | Avec le SSO |
+| 3 | Politique de rétention + export/effacement par membre | Agent (phase 6) | Fait le 4 novembre 2026 (ADR-0015) |
 | 4 | `SECURITY.md`, SBOM et `THIRD_PARTY_NOTICES` en CI | Agent | Phase 6 |
 | 5 | Pays de traitement par fournisseur + option « UE ou local uniquement » | Agent (phase 6) | Phase 6 |
 | 6 | Modèles de registre des traitements et d'information SSO | Agent (brouillon) puis avocat | Avant le premier client |

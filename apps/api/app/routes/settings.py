@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.context import AppSettings, CanConfigure, Context, Session
 from app.schemas.settings import RunLimits, SettingsOut
 from app.services import audit, workspace_settings
+from nfactory_core.retention import RetentionPolicy
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -20,5 +21,17 @@ async def put_run_limits(
     view = await workspace_settings.save_run_limits(session, ctx, settings, limits)
     details = limits.model_dump()
     audit.record(session, ctx, "settings.run_limits", ctx.default_workspace_id, details=details)
+    await session.commit()
+    return view
+
+
+@router.put("/retention")
+async def put_retention(
+    policy: RetentionPolicy, session: Session, ctx: CanConfigure, settings: AppSettings
+) -> SettingsOut:
+    """How long finished runs and audit entries are kept (ADR-0015); null keeps them."""
+    view = await workspace_settings.save_retention(session, ctx, settings, policy)
+    details = policy.model_dump()
+    audit.record(session, ctx, "settings.retention", ctx.default_workspace_id, details=details)
     await session.commit()
     return view

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 // Governance journeys (task 5.4): settings changes are audited, the approval center lists
@@ -44,4 +46,28 @@ test("the approval center lists pending decisions with a way to the run", async 
   if (await empty.isVisible()) return;
   await pending.getByRole("link", { name: /Ouvrir le run/ }).click();
   await expect(page).toHaveURL(/\/runs\/run_/);
+});
+
+// ADR-0015. Only the audit duration moves, between two values that delete nothing in the
+// demo stack; the run duration stays untouched so the demo runs are never purged.
+test("a retention choice is audited and the member downloads their own data", async ({
+  page,
+}) => {
+  await page.goto("/settings");
+  const auditDays = page.getByLabel("Journal d'audit (jours)");
+  await auditDays.fill((await auditDays.inputValue()) === "3650" ? "3649" : "3650");
+  await page.getByRole("button", { name: "Enregistrer la conservation" }).click();
+  await expect(page.getByText(/Conservation enregistrée/)).toBeVisible();
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: /Télécharger mes données/ }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("nfactory-mes-donnees.json");
+  const data = JSON.parse(readFileSync(await file.path(), "utf-8"));
+  expect(data.profile.user_id).toBe("usr_local");
+
+  await page.goto("/audit");
+  const journal = page.getByRole("table", { name: "Journal d'audit" });
+  await expect(journal.getByRole("row").nth(1)).toContainText("Export de ses données");
+  await expect(journal.getByRole("row").nth(2)).toContainText("Conservation des données modifiée");
 });

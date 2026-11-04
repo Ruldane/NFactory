@@ -2,13 +2,13 @@
 
 import { type FormEvent, useState } from "react";
 
+import { MembersSection } from "@/components/settings/members-section";
+import { MyData } from "@/components/settings/my-data";
+import { RetentionForm } from "@/components/settings/retention-form";
+import { FIELD, KICKER } from "@/components/settings/styles";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSaveRunLimits, useWorkspaceSettings } from "@/lib/api/queries";
 import type { RunLimits, WorkspaceSettings } from "@/lib/api/types";
-
-const FIELD =
-  "w-full border border-navy/20 bg-cream px-4 py-3 font-mono text-navy focus-visible:border-coral-deep focus-visible:outline-none";
-const KICKER = "font-mono text-[11px] uppercase tracking-[0.2em] text-navy/60";
 
 const LIMITS: { key: keyof RunLimits; label: string; help: string }[] = [
   {
@@ -25,15 +25,6 @@ const LIMITS: { key: keyof RunLimits; label: string; help: string }[] = [
     key: "max_repair_attempts",
     label: "Tentatives de correction",
     help: "Si les tests échouent, nombre de corrections essayées avant l'échec.",
-  },
-];
-
-// Not built yet: listed with the phase that brings them (spec §9.3 Settings).
-const LATER: { title: string; phase: number; detail: string }[] = [
-  {
-    title: "Rétention et export des données",
-    phase: 6,
-    detail: "Durée de conservation des runs, purge et export de vos données.",
   },
 ];
 
@@ -150,24 +141,14 @@ export function SettingsView() {
         <LimitsForm settings={settings.data} />
       </section>
       <section className="space-y-4">
-        <h2 className="font-display text-2xl text-navy">À venir</h2>
-        <ul className="grid gap-4 md:grid-cols-2">
-          {LATER.map((item) => (
-            <li
-              key={item.title}
-              className="border border-dashed border-navy/25 px-5 py-4 text-navy/55"
-            >
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="font-medium">{item.title}</span>
-                <span className="font-mono text-[11px] uppercase tracking-[0.2em]">
-                  Phase {item.phase}
-                </span>
-              </div>
-              <p className="mt-1 text-sm">{item.detail}</p>
-            </li>
-          ))}
-        </ul>
+        <h2 className="font-display text-2xl text-navy">Conservation des données</h2>
+        <RetentionForm settings={settings.data} />
       </section>
+      <section className="space-y-4">
+        <h2 className="font-display text-2xl text-navy">Mes données</h2>
+        <MyData />
+      </section>
+      <MembersSection />
     </div>
   );
 }

@@ -61,3 +61,11 @@ def test_knowledge_indexing_job_is_registered_and_caught_up_every_minute() -> No
     names = {getattr(f, "__name__", "") for f in settings["functions"]}
     assert INDEX_JOB in names
     assert "cron:index_pending" in {job.name for job in settings["cron_jobs"]}
+
+
+def test_retention_runs_every_night_and_at_startup() -> None:
+    settings = build_worker_settings(Settings())
+    jobs = {job.name: job for job in settings["cron_jobs"]}
+
+    retention = jobs["cron:apply_retention"]
+    assert (retention.hour, retention.minute, retention.run_at_startup) == ({3}, {15}, True)

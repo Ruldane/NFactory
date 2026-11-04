@@ -17,6 +17,7 @@ import type {
   Recipe,
   RunDetail,
   RunTrace,
+  RetentionPolicy,
   RunLimits,
   WorkspaceSettings,
 } from "@/lib/api/types";
@@ -239,5 +240,26 @@ export function useSaveRunLimits() {
     mutationFn: (limits: RunLimits) =>
       apiPut<WorkspaceSettings>("/settings/run-limits", limits),
     onSuccess: (settings) => client.setQueryData(settingsKey, settings),
+  });
+}
+
+export function useSaveRetention() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (policy: RetentionPolicy) =>
+      apiPut<WorkspaceSettings>("/settings/retention", policy),
+    onSuccess: (settings) => client.setQueryData(settingsKey, settings),
+  });
+}
+
+// The database cascades the runs, deliverables and documents (ADR-0015).
+export function useDeleteProject() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (projectId: string) => apiDelete<null>(`/projects/${projectId}`),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }

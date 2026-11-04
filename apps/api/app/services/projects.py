@@ -3,10 +3,10 @@
 A project outside the caller's workspaces raises not_found, exactly like a missing one.
 """
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.errors import not_found
+from app.errors import AppError, not_found
 from app.schemas.common import Page
 from app.schemas.projects import (
     ProjectCreate,
@@ -17,6 +17,7 @@ from app.schemas.projects import (
 )
 from app.services.identity import RequestContext
 from nfactory_core.models import Project, Run
+from nfactory_core.states import TERMINAL_STATES
 
 
 async def list_projects(
@@ -81,3 +82,20 @@ async def _owned(session: AsyncSession, ctx: RequestContext, project_id: str) ->
     if project is None:
         raise not_found("Projet")
     return project
+
+
+async def delete_project(session: AsyncSession, ctx: RequestContext, project_id: str) -> int:
+    """Delete the project and, through the database's cascades, its runs, deliverables,
+    documents and vectors (ADR-0015). Returns the number of runs; the caller commits.
+    The worker's sweep then removes the files no run points to."""
+    project = await _owned(session, ctx, project_id)
+    states = list(await session.scalars(select(Run.state).where(Run.project_id == project.id)))
+    finished = {state.value for state in TERMINAL_STATES}
+    if any(state not in finished for state in states):
+        raise AppError(
+            409,
+            "project_busy",
+            "Un run de ce projet est encore actif : annulez-le ou attendez sa fin.",
+        )
+    await session.execute(delete(Project).where(Project.id == project.id))
+    return len(states)

@@ -19,6 +19,7 @@ from app.routes import (
     health,
     knowledge,
     local_runtimes,
+    members,
     projects,
     providers,
     recipes,
@@ -122,6 +123,7 @@ def create_app(
         local_runtimes,
         agent_tasks,
         access,
+        members,
         saved_recipes,
     ):
         api.include_router(module.router)

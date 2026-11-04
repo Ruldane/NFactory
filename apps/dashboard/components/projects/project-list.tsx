@@ -4,18 +4,28 @@ import { useState } from "react";
 
 import { projectTypeLabel } from "@/components/projects/project-types";
 import { TypeFilter } from "@/components/projects/type-filter";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useProjects } from "@/lib/api/queries";
+import { can, useMe } from "@/lib/api/access";
+import { useDeleteProject, useProjects } from "@/lib/api/queries";
 import type { ProjectType } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
 
 export function ProjectList() {
   const [type, setType] = useState<ProjectType | null>(null);
   const { data, error, isPending } = useProjects(type);
+  const me = useMe();
+  const canDelete = can(me.data, "configure");
+  const deletion = useDeleteProject();
 
   return (
     <div className="space-y-6">
       <TypeFilter value={type} onChange={setType} />
+      {deletion.error ? (
+        <div role="alert" className="border-l-4 border-coral-deep bg-coral-deep/8 px-5 py-4 text-sm">
+          {deletion.error.message}
+        </div>
+      ) : null}
       {error ? (
         <div role="alert" className="border-l-4 border-coral-deep bg-coral-deep/8 px-5 py-4 text-sm">
           {error.message}
@@ -45,6 +55,16 @@ export function ProjectList() {
               <p className="mt-auto font-mono text-[11px] text-navy/50">
                 {project.id} · {formatDateTime(project.created_at)}
               </p>
+              {canDelete ? (
+                <ConfirmButton
+                  label="Supprimer"
+                  ariaLabel="Supprimer le projet"
+                  confirmLabel={`Oui, supprimer « ${project.title} »`}
+                  warning="Irréversible : ses runs, livrables et documents sont supprimés avec lui."
+                  pending={deletion.isPending}
+                  onConfirm={() => deletion.mutate(project.id)}
+                />
+              ) : null}
             </li>
           ))}
         </ul>

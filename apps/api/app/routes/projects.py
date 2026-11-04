@@ -1,8 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
-from app.context import CanBuild, Context, Session
+from app.context import CanBuild, CanConfigure, Context, Session
 from app.schemas.common import Page
 from app.schemas.projects import (
     ProjectCreate,
@@ -11,7 +11,7 @@ from app.schemas.projects import (
     ProjectType,
     ProjectUpdate,
 )
-from app.services import projects
+from app.services import audit, projects
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -42,3 +42,12 @@ async def update_project(
     session: Session, ctx: CanBuild, project_id: str, data: ProjectUpdate
 ) -> ProjectOut:
     return await projects.update_project(session, ctx, project_id, data)
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(session: Session, ctx: CanConfigure, project_id: str) -> Response:
+    """Delete the project and everything it holds; refused while one of its runs is active."""
+    runs = await projects.delete_project(session, ctx, project_id)
+    audit.record(session, ctx, "project.deleted", project_id, details={"runs": runs})
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

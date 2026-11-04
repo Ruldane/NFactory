@@ -20,6 +20,14 @@ describe("audit words", () => {
     expect(describeAction("auth.denied")).toBe("Connexion refusée");
   });
 
+  it("names the data-rights actions (ADR-0015)", () => {
+    expect(describeAction("settings.retention")).toBe("Conservation des données modifiée");
+    expect(describeAction("retention.purge")).toBe("Purge des données expirées");
+    expect(describeAction("member.export")).toBe("Export de ses données");
+    expect(describeAction("member.erased")).toBe("Membre effacé");
+    expect(describeAction("project.deleted")).toBe("Projet supprimé");
+  });
+
   it("names decisions, and a missing one as a dash", () => {
     expect(describeDecision("rejected")).toBe("Refusé");
     expect(describeDecision(null)).toBe("—");

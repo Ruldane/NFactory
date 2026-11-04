@@ -240,6 +240,29 @@ export interface WorkspaceSettings {
   sandbox: "isolated" | "local";
   run_limits: RunLimits;
   limit_bounds: Record<keyof RunLimits, { min: number; max: number }>;
+  retention: RetentionPolicy;
+  retention_bounds: Record<keyof RetentionPolicy, { min: number; max: number }>;
+}
+
+// ADR-0015: null keeps forever.
+export interface RetentionPolicy {
+  runs_days: number | null;
+  audit_days: number | null;
+}
+
+export interface Member {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  role: string;
+  role_label: string;
+  is_owner: boolean;
+  created_at: string;
+}
+
+export interface Erasure {
+  user_id: string;
+  anonymised: boolean;
 }
 
 // --- AI providers ("Moteurs IA", spec §6). No field ever carries a key. ---

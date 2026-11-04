@@ -16,11 +16,22 @@ const SETTINGS: WorkspaceSettings = {
     max_agent_steps: { min: 20, max: 500 },
     max_repair_attempts: { min: 0, max: 10 },
   },
+  retention: { runs_days: null, audit_days: 365 },
+  retention_bounds: { runs_days: { min: 7, max: 3650 }, audit_days: { min: 30, max: 3650 } },
+};
+
+const ME = {
+  user_id: "usr_local",
+  display_name: "Moi (local)",
+  workspaces: [
+    { id: "wks_local", name: "Mon espace", role: "viewer", role_label: "Lecteur", permissions: ["read"] },
+  ],
 };
 
 function serve(onPut: (body: unknown) => Response) {
-  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === "PUT") return onPut(JSON.parse(String(init.body)));
+    if (url === "/api/v1/me") return new Response(JSON.stringify(ME));
     return new Response(JSON.stringify(SETTINGS));
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -45,9 +56,34 @@ describe("SettingsView", () => {
 
     expect(await screen.findByText(/Sandbox isolé, sans Internet/)).toBeVisible();
     expect(screen.getByText(/Mode démo actif/)).toBeVisible();
-    // Not built yet: shown with the phase that brings it.
-    expect(screen.getByText(/Rétention et export des données/)).toBeVisible();
-    expect(screen.getByText("Phase 6")).toBeVisible();
+    expect(screen.queryByText(/Phase 6/)).toBeNull();
+  });
+
+  it("offers the member's own data as a download", async () => {
+    serve(() => new Response("{}"));
+    renderView();
+
+    const link = await screen.findByRole("link", { name: /Télécharger mes données/ });
+    expect(link).toHaveAttribute("href", "/api/v1/me/export");
+    expect(link).toHaveAttribute("download");
+  });
+
+  it("saves how long data is kept, empty meaning forever", async () => {
+    const fetchMock = serve(
+      (body) => new Response(JSON.stringify({ ...SETTINGS, retention: body as WorkspaceSettings["retention"] })),
+    );
+    renderView();
+
+    const runs = await screen.findByLabelText("Runs terminés (jours)");
+    expect(runs).toHaveValue(null);
+    expect(screen.getByLabelText("Journal d'audit (jours)")).toHaveValue(365);
+    await userEvent.type(runs, "90");
+    await userEvent.clear(screen.getByLabelText("Journal d'audit (jours)"));
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer la conservation" }));
+
+    expect(await screen.findByText(/Conservation enregistrée/)).toBeVisible();
+    const put = fetchMock.mock.calls.find(([url, init]) => init?.method === "PUT" && url.endsWith("/retention"));
+    expect(JSON.parse(String(put?.[1]?.body))).toEqual({ runs_days: 90, audit_days: null });
   });
 
   it("saves new run limits", async () => {

@@ -20,6 +20,11 @@ const ACTIONS: Record<string, string> = {
   "auth.login": "Connexion",
   "auth.logout": "Déconnexion",
   "auth.denied": "Connexion refusée",
+  "settings.retention": "Conservation des données modifiée",
+  "retention.purge": "Purge des données expirées",
+  "member.export": "Export de ses données",
+  "member.erased": "Membre effacé",
+  "project.deleted": "Projet supprimé",
 };
 
 const DECISIONS: Record<string, string> = {
